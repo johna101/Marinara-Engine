@@ -6,6 +6,7 @@ import { Modal } from "../ui/Modal";
 import { Upload, FileJson, Image, CheckCircle, XCircle, Loader2 } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { characterKeys } from "../../hooks/use-characters";
+import { lorebookKeys } from "../../hooks/use-lorebooks";
 import { parsePngCharacterCard } from "../../lib/png-parser";
 
 interface Props {
@@ -51,6 +52,9 @@ export function ImportCharacterModal({ open, onClose }: Props) {
         setStatus("success");
         setMessage(`Imported "${data.name ?? file.name}" successfully!`);
         qc.invalidateQueries({ queryKey: characterKeys.list() });
+        if (data.lorebook) {
+          qc.invalidateQueries({ queryKey: lorebookKeys.all });
+        }
       } else {
         setStatus("error");
         setMessage(data.error ?? "Import failed");

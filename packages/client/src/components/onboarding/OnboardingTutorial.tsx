@@ -405,8 +405,25 @@ function OnboardingTutorialInner() {
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[9999]">
-      {/* Dark backdrop */}
-      <div className="pointer-events-auto fixed inset-0 bg-black/60" />
+      {/* Dark backdrop with spotlight cutout */}
+      <div
+        className="pointer-events-auto fixed inset-0 bg-black/60 transition-[clip-path] duration-300"
+        style={targetRect ? { clipPath: buildClipPath(targetRect) } : undefined}
+      />
+
+      {/* Pulsing highlight ring around the target element */}
+      {targetRect && (
+        <div
+          className="pointer-events-none fixed rounded-xl ring-2 ring-[var(--primary)] animate-pulse"
+          style={{
+            top: targetRect.top - PAD,
+            left: targetRect.left - PAD,
+            width: targetRect.width + PAD * 2,
+            height: targetRect.height + PAD * 2,
+            boxShadow: '0 0 16px 4px color-mix(in srgb, var(--primary) 40%, transparent)',
+          }}
+        />
+      )}
 
       {/* Centered steps use a flex wrapper so Framer Motion transforms don't override CSS centering */}
       {isCentered ? (

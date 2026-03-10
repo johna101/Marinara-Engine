@@ -20,53 +20,83 @@ if not "%USER_INPUT%"=="" set "INSTALL_DIR=%USER_INPUT%"
 echo.
 echo  [..] Checking prerequisites...
 
+:: ── Node.js ──
+set "NEED_NODE=0"
 where node >nul 2>&1
 if %errorlevel% neq 0 (
-    echo.
-    echo  [ERROR] Node.js is not installed or not in PATH.
-    echo  Please install Node.js 20+ from https://nodejs.org
-    echo  Then re-run this installer.
-    echo.
-    pause
-    exit /b 1
+    set "NEED_NODE=1"
+) else (
+    for /f "tokens=1 delims=." %%a in ('node -v') do set "NODE_RAW=%%a"
+    set "NODE_MAJOR=!NODE_RAW:v=!"
+    if not defined NODE_MAJOR set "NEED_NODE=1"
+    if defined NODE_MAJOR if !NODE_MAJOR! LSS 20 set "NEED_NODE=1"
 )
 
-for /f "tokens=1 delims=." %%a in ('node -v') do set "NODE_RAW=%%a"
-set "NODE_MAJOR=%NODE_RAW:v=%"
-
-if not defined NODE_MAJOR (
-    echo.
-    echo  [ERROR] Unable to determine Node.js version from "node -v".
-    echo  Please ensure Node.js is correctly installed and in PATH,
-    echo  then re-run this installer.
-    echo.
-    pause
-    exit /b 1
+if "!NEED_NODE!"=="1" (
+    echo  [..] Node.js 20+ not found — downloading installer...
+    set "NODE_MSI=%TEMP%\node-lts-install.msi"
+    powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.14.0/node-v22.14.0-x64.msi' -OutFile '!NODE_MSI!' -UseBasicParsing } catch { exit 1 }"
+    if !errorlevel! neq 0 (
+        echo  [ERROR] Failed to download Node.js. Please install manually from https://nodejs.org
+        pause
+        exit /b 1
+    )
+    echo  [..] Installing Node.js (this may request admin permissions)...
+    msiexec /i "!NODE_MSI!" /qb
+    if !errorlevel! neq 0 (
+        echo  [ERROR] Node.js installation failed. Please install manually from https://nodejs.org
+        pause
+        exit /b 1
+    )
+    del "!NODE_MSI!" 2>nul
+    :: Refresh PATH so node is available in this session
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
+    for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
+    set "PATH=!SYS_PATH!;!USR_PATH!"
+    where node >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo  [ERROR] Node.js was installed but not found in PATH. Please restart your terminal and re-run.
+        pause
+        exit /b 1
+    )
+    echo  [OK] Node.js installed successfully
 )
-
-if %NODE_MAJOR% LSS 20 (
-    echo.
-    echo  [ERROR] Detected Node.js version is too old:
-    node -v
-    echo  Marinara Engine requires Node.js 20 or newer.
-    echo  Please install the latest Node.js 20+ from https://nodejs.org
-    echo  and then re-run this installer.
-    echo.
-    pause
-    exit /b 1
-)
-echo  [OK] Node.js found: 
+echo  [OK] Node.js found:
 node -v
 
+:: ── Git ──
+set "NEED_GIT=0"
 where git >nul 2>&1
-if %errorlevel% neq 0 (
-    echo.
-    echo  [ERROR] Git is not installed or not in PATH.
-    echo  Please install Git from https://git-scm.com/download/win
-    echo  Then re-run this installer.
-    echo.
-    pause
-    exit /b 1
+if %errorlevel% neq 0 set "NEED_GIT=1"
+
+if "!NEED_GIT!"=="1" (
+    echo  [..] Git not found — downloading installer...
+    set "GIT_EXE=%TEMP%\git-install.exe"
+    powershell -Command "try { [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; $rel = Invoke-RestMethod -Uri 'https://api.github.com/repos/git-for-windows/git/releases/latest' -UseBasicParsing; $asset = $rel.assets | Where-Object { $_.name -match '64-bit\.exe$' } | Select-Object -First 1; Invoke-WebRequest -Uri $asset.browser_download_url -OutFile '!GIT_EXE!' -UseBasicParsing } catch { exit 1 }"
+    if !errorlevel! neq 0 (
+        echo  [ERROR] Failed to download Git. Please install manually from https://git-scm.com
+        pause
+        exit /b 1
+    )
+    echo  [..] Installing Git (this may request admin permissions)...
+    "!GIT_EXE!" /VERYSILENT /NORESTART /NOCANCEL /SP- /CLOSEAPPLICATIONS /RESTARTAPPLICATIONS /COMPONENTS="icons,ext\reg\shellhere,assoc,assoc_sh"
+    if !errorlevel! neq 0 (
+        echo  [ERROR] Git installation failed. Please install manually from https://git-scm.com
+        pause
+        exit /b 1
+    )
+    del "!GIT_EXE!" 2>nul
+    :: Refresh PATH
+    for /f "tokens=2*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "SYS_PATH=%%B"
+    for /f "tokens=2*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "USR_PATH=%%B"
+    set "PATH=!SYS_PATH!;!USR_PATH!"
+    where git >nul 2>&1
+    if !errorlevel! neq 0 (
+        echo  [ERROR] Git was installed but not found in PATH. Please restart your terminal and re-run.
+        pause
+        exit /b 1
+    )
+    echo  [OK] Git installed successfully
 )
 echo  [OK] Git found
 

@@ -4,7 +4,7 @@
 // ──────────────────────────────────────────────
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { useUIStore } from "../../stores/ui.store";
-import { useAgentConfigs, useUpdateAgent, useCreateAgent, type AgentConfigRow } from "../../hooks/use-agents";
+import { useAgentConfigs, useUpdateAgent, useCreateAgent, useToggleAgent, type AgentConfigRow } from "../../hooks/use-agents";
 import { useConnections } from "../../hooks/use-connections";
 import { useCustomTools, type CustomToolRow } from "../../hooks/use-custom-tools";
 import {
@@ -88,6 +88,7 @@ export function AgentEditor() {
   const updateAgent = useUpdateAgent();
   const createAgent = useCreateAgent();
   const deleteAgent = useDeleteAgent();
+  const toggleBuiltInAgent = useToggleAgent();
 
   // Find built-in meta (null for custom agents)
   const builtIn = useMemo(() => BUILT_IN_AGENTS.find((a) => a.id === agentDetailId) ?? null, [agentDetailId]);
@@ -329,6 +330,23 @@ export function AgentEditor() {
 
   const isPending = updateAgent.isPending || createAgent.isPending;
 
+  // Current enabled state
+  const isEnabled = dbConfig
+    ? dbConfig.enabled === "true"
+    : builtIn
+      ? builtIn.enabledByDefault
+      : true;
+
+  const handleToggleEnabled = async () => {
+    if (builtIn) {
+      // Built-in agents use the toggle route (creates config on first toggle)
+      await toggleBuiltInAgent.mutateAsync(agentDetailId!);
+    } else if (dbConfig) {
+      // Custom agents update via PATCH
+      await updateAgent.mutateAsync({ id: dbConfig.id, enabled: !isEnabled });
+    }
+  };
+
   return (
     <div className="flex flex-1 flex-col overflow-hidden bg-[var(--background)]">
       {/* ── Header ── */}
@@ -363,6 +381,22 @@ export function AgentEditor() {
             </span>
           )}
           {dirty && !saveError && <span className="mr-2 text-[10px] font-medium text-amber-400">Unsaved</span>}
+          {agentDetailId !== "__new__" && (
+            <button
+              onClick={handleToggleEnabled}
+              disabled={toggleBuiltInAgent.isPending || updateAgent.isPending}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-medium transition-all active:scale-[0.98] disabled:opacity-50",
+                isEnabled
+                  ? "text-emerald-400 hover:bg-emerald-500/15"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]",
+              )}
+              title={isEnabled ? "Disable agent globally" : "Enable agent globally"}
+            >
+              {isEnabled ? <ToggleRight size={16} /> : <ToggleLeft size={16} />}
+              {isEnabled ? "Enabled" : "Disabled"}
+            </button>
+          )}
           {isCustomAgent && dbConfig && (
             <button
               onClick={handleDelete}
@@ -1040,18 +1074,13 @@ export function AgentEditor() {
                 <strong className="text-[var(--foreground)]">DB Status:</strong>{" "}
                 {dbConfig ? `Persisted (ID: ${dbConfig.id})` : "Not yet saved — click Save to persist"}
               </p>
-              {builtIn && (
-                <p>
-                  <strong className="text-[var(--foreground)]">Enabled:</strong>{" "}
-                  {dbConfig
-                    ? dbConfig.enabled === "true"
-                      ? "Yes"
-                      : "No"
-                    : builtIn.enabledByDefault
-                      ? "Yes (default)"
-                      : "No (default)"}
-                </p>
-              )}
+              <p>
+                <strong className="text-[var(--foreground)]">Enabled:</strong>{" "}
+                <span className={isEnabled ? "text-emerald-400" : "text-red-400"}>
+                  {isEnabled ? "Yes" : "No"}
+                </span>
+                {!dbConfig && builtIn && " (default)"}
+              </p>
             </div>
           </div>
         </div>

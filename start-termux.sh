@@ -21,6 +21,30 @@ for pkg_name in git; do
     fi
 done
 
+# ── Fix platform detection for native binaries ──
+# Node.js 22+ on Termux reports process.platform = "android", but Termux uses
+# the Linux kernel and Linux ARM64 native binaries work perfectly. Tell pnpm to
+# install both android AND linux optional dependencies so build tools like
+# rollup, lightningcss, and tailwindcss oxide resolve correctly.
+# Run early so the auto-update's pnpm install also benefits.
+NODE_PLAT=$(node -e "process.stdout.write(process.platform)" 2>/dev/null || echo "")
+if [ "$NODE_PLAT" = "android" ]; then
+    NPMRC_MARKER="# termux-supported-architectures"
+    if ! grep -q "$NPMRC_MARKER" .npmrc 2>/dev/null; then
+        NODE_ARCH=$(node -e "process.stdout.write(process.arch)" 2>/dev/null || echo "")
+        echo "  [OK] Detected Android/Termux (${NODE_ARCH:-unknown}) — enabling Linux binaries"
+        {
+            echo "$NPMRC_MARKER"
+            echo "supportedArchitectures.os[]=current"
+            echo "supportedArchitectures.os[]=linux"
+            echo "supportedArchitectures.cpu[]=current"
+            [ -n "$NODE_ARCH" ] && echo "supportedArchitectures.cpu[]=$NODE_ARCH"
+        } >> .npmrc
+        # Force pnpm to re-resolve optional deps on next install
+        TERMUX_FORCE_INSTALL=1
+    fi
+fi
+
 # ── Auto-update from Git ──
 if [ -d ".git" ]; then
     echo "  [..] Checking for updates..."
@@ -74,9 +98,9 @@ fi
 echo "  [OK] pnpm found"
 
 # ── Install dependencies ──
-if [ ! -d "node_modules" ]; then
+if [ ! -d "node_modules" ] || [ "$TERMUX_FORCE_INSTALL" = "1" ]; then
     echo ""
-    echo "  [..] Installing dependencies (first run)..."
+    echo "  [..] Installing dependencies${TERMUX_FORCE_INSTALL:+ (refreshing for platform fix)}..."
     echo "       This may take several minutes on mobile."
     echo ""
     pnpm install
@@ -185,7 +209,12 @@ if [ ! -d "packages/client/dist" ]; then
     # Skip tsc type-check on Termux — it OOMs on low-memory devices.
     # Skip PWA service worker — terser minifier OOMs on low-memory devices.
     # Vite doesn't need tsc output (tsconfig has noEmit: true).
-    SKIP_PWA=1 pnpm --filter @marinara-engine/client exec vite build
+    if ! SKIP_PWA=1 pnpm --filter @marinara-engine/client exec vite build 2>&1; then
+        echo "  [WARN] Vite build failed — native binaries may not match Node.js $(node -v)."
+        echo "  [..] Installing WASM fallback for rollup and retrying..."
+        pnpm --filter @marinara-engine/client add -D @rollup/wasm-node 2>/dev/null || true
+        SKIP_PWA=1 pnpm --filter @marinara-engine/client exec vite build
+    fi
 fi
 
 # ── Database schema ──

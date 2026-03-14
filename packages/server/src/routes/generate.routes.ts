@@ -33,6 +33,7 @@ import { wrapContent } from "../services/prompt/format-engine.js";
 import type { LLMToolDefinition, ChatMessage, LLMUsage } from "../services/llm/base-provider.js";
 import { executeToolCalls } from "../services/tools/tool-executor.js";
 import { createAgentPipeline, type ResolvedAgent } from "../services/agents/agent-pipeline.js";
+import { DATA_DIR } from "../utils/data-dir.js";
 import { executeAgent } from "../services/agents/agent-executor.js";
 import { executeKnowledgeRetrieval } from "../services/agents/knowledge-retrieval.js";
 import { extractFileText, getSourceFilePath } from "./knowledge-sources.routes.js";
@@ -360,7 +361,17 @@ export async function generateRoutes(app: FastifyInstance) {
       // ────────────────────────────────────────
       // Agent Pipeline: resolve enabled agents
       // ────────────────────────────────────────
-      const enabledConfigs = chatEnableAgents ? await agentsStore.listEnabled() : [];
+      const chatActiveAgentIds: string[] = Array.isArray(chatMeta.activeAgentIds)
+        ? (chatMeta.activeAgentIds as string[])
+        : [];
+      const hasPerChatAgentList = chatActiveAgentIds.length > 0;
+      const perChatAgentSet = new Set(chatActiveAgentIds);
+
+      const enabledConfigs = chatEnableAgents
+        ? hasPerChatAgentList
+          ? await agentsStore.list()
+          : await agentsStore.listEnabled()
+        : [];
 
       // Also include built-in agents that are enabled by default but have no DB row yet.
       // We must check ALL configs (not just enabled) so that explicitly-disabled
@@ -377,6 +388,8 @@ export async function generateRoutes(app: FastifyInstance) {
       for (const cfg of enabledConfigs) {
         // Chat Summary agent is manual-only — skip it in the generation pipeline
         if (cfg.type === "chat-summary") continue;
+        // If this chat has a per-chat agent list, only include agents in that list
+        if (hasPerChatAgentList && !perChatAgentSet.has(cfg.type)) continue;
         const settings = cfg.settings ? JSON.parse(cfg.settings as string) : {};
         let agentProvider = provider;
         let agentModel = conn.model;
@@ -408,6 +421,8 @@ export async function generateRoutes(app: FastifyInstance) {
 
       // Built-in agents with no DB row → use defaults
       for (const builtIn of defaultEnabledBuiltIns) {
+        // If this chat has a per-chat agent list, only include agents in that list
+        if (hasPerChatAgentList && !perChatAgentSet.has(builtIn.id)) continue;
         resolvedAgents.push({
           id: `builtin:${builtIn.id}`,
           type: builtIn.id,
@@ -586,14 +601,24 @@ export async function generateRoutes(app: FastifyInstance) {
         memory: {},
         activatedLorebookEntries: null,
         writableLorebookIds: null,
+        signal: abortController.signal,
       };
+
+      // Populate writable lorebook IDs for the lorebook-keeper agent
+      if (resolvedAgents.some((a) => a.type === "lorebook-keeper")) {
+        const enabledBooks = await lorebooksStore.list();
+        const enabledIds = enabledBooks
+          .filter((b: any) => b.enabled === true || b.enabled === "true")
+          .map((b: any) => b.id);
+        agentContext.writableLorebookIds = enabledIds;
+      }
 
       // If the expression agent is enabled, load available sprite expressions per character
       if (resolvedAgents.some((a) => a.type === "expression")) {
         try {
           const { readdirSync, existsSync: existsSyncFs } = await import("fs");
           const { join: joinPath, extname: extnameFs } = await import("path");
-          const spritesRoot = joinPath(process.cwd(), "data", "sprites");
+          const spritesRoot = joinPath(DATA_DIR, "sprites");
           const spriteExts = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".avif", ".svg"]);
           const perChar: Array<{ characterId: string; characterName: string; expressions: string[] }> = [];
           for (const char of agentContext.characters) {
@@ -618,7 +643,7 @@ export async function generateRoutes(app: FastifyInstance) {
         try {
           const { readdirSync, readFileSync, existsSync } = await import("fs");
           const { join, extname } = await import("path");
-          const bgDir = join(process.cwd(), "data", "backgrounds");
+          const bgDir = join(DATA_DIR, "backgrounds");
           if (existsSync(bgDir)) {
             const exts = new Set([".jpg", ".jpeg", ".png", ".gif", ".webp", ".avif"]);
             const files = readdirSync(bgDir).filter((f: string) => exts.has(extname(f).toLowerCase()));
@@ -810,6 +835,9 @@ export async function generateRoutes(app: FastifyInstance) {
         }
       }
 
+      // ── Early exit if client disconnected during pre-generation agents ──
+      if (abortController.signal.aborted) return;
+
       // ────────────────────────────────────────
       // Knowledge Retrieval agent (chunked RAG)
       // ────────────────────────────────────────
@@ -940,6 +968,9 @@ export async function generateRoutes(app: FastifyInstance) {
         );
       }
 
+      // ── Early exit if client disconnected during knowledge retrieval / injection ──
+      if (abortController.signal.aborted) return;
+
       // Check if tool-use is requested (from chat metadata or input).
       // Tools are also enabled when agents are active — agents work separately
       // and may depend on tools (dice rolls, game state, expressions) even if
@@ -960,8 +991,17 @@ export async function generateRoutes(app: FastifyInstance) {
         scriptBody: string | null;
       }> = [];
       if (enableTools) {
+        // Per-chat tool selection (empty = all tools)
+        const chatActiveToolIds: string[] = Array.isArray(chatMeta.activeToolIds)
+          ? (chatMeta.activeToolIds as string[])
+          : [];
+        const hasToolFilter = chatActiveToolIds.length > 0;
+
         // Built-in tools
-        toolDefs = BUILT_IN_TOOLS.map((t) => ({
+        const builtInFiltered = hasToolFilter
+          ? BUILT_IN_TOOLS.filter((t) => chatActiveToolIds.includes(t.name))
+          : BUILT_IN_TOOLS;
+        toolDefs = builtInFiltered.map((t) => ({
           type: "function" as const,
           function: {
             name: t.name,
@@ -971,7 +1011,10 @@ export async function generateRoutes(app: FastifyInstance) {
         }));
         // Custom tools from DB
         const enabledCustomTools = await customToolsStore.listEnabled();
-        for (const ct of enabledCustomTools) {
+        const customFiltered = hasToolFilter
+          ? enabledCustomTools.filter((ct: any) => chatActiveToolIds.includes(ct.name))
+          : enabledCustomTools;
+        for (const ct of customFiltered) {
           const schema =
             typeof ct.parametersSchema === "string" ? JSON.parse(ct.parametersSchema) : ct.parametersSchema;
           toolDefs.push({
@@ -1180,24 +1223,47 @@ export async function generateRoutes(app: FastifyInstance) {
 
           // Stream tokens in real-time via onToken callback
           const onToken = (chunk: string) => {
+            // If the request has been aborted, skip emitting any further tokens.
+            if (abortController.signal.aborted) {
+              return;
+            }
             fullResponse += chunk;
             reply.raw.write(`data: ${JSON.stringify({ type: "token", data: chunk })}\n\n`);
           };
 
           for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-            if (abortController.signal.aborted) break;
-            const result = await provider.chatComplete(loopMessages, {
-              model: conn.model,
-              temperature,
-              maxTokens,
-              tools: toolDefs,
-              enableCaching: conn.enableCaching === "true",
-              enableThinking: showThoughts,
-              reasoningEffort: resolvedEffort ?? undefined,
-              verbosity: verbosity ?? undefined,
-              onThinking,
-              onToken,
-            });
+            // Treat abort as a silent cancellation: stop the pipeline immediately.
+            if (abortController.signal.aborted) {
+              return;
+            }
+
+            let result;
+            try {
+              result = await provider.chatComplete(loopMessages, {
+                model: conn.model,
+                temperature,
+                maxTokens,
+                tools: toolDefs,
+                enableCaching: conn.enableCaching === "true",
+                enableThinking: showThoughts,
+                reasoningEffort: resolvedEffort ?? undefined,
+                verbosity: verbosity ?? undefined,
+                onThinking,
+                onToken,
+                signal: abortController.signal,
+              });
+            } catch (err: any) {
+              // If the error was caused by an abort, cancel silently and skip post-processing.
+              if (abortController.signal.aborted || (err && err.name === "AbortError")) {
+                return;
+              }
+              throw err;
+            }
+
+            // If abort was triggered during chat completion, exit before using the result.
+            if (abortController.signal.aborted) {
+              return;
+            }
 
             // If provider doesn't support onToken (fell back to non-streaming),
             // write the content conventionally
@@ -1297,6 +1363,7 @@ export async function generateRoutes(app: FastifyInstance) {
                 verbosity: verbosity ?? undefined,
                 onThinking,
                 onToken,
+                signal: abortController.signal,
               });
               if (finalResult.content && fullResponse.length === prevLen) {
                 writeContentChunked(finalResult.content);
@@ -1324,6 +1391,7 @@ export async function generateRoutes(app: FastifyInstance) {
             reasoningEffort: resolvedEffort ?? undefined,
             verbosity: verbosity ?? undefined,
             onThinking,
+            signal: abortController.signal,
           });
           let result = await gen.next();
           while (!result.done) {
@@ -1709,6 +1777,64 @@ export async function generateRoutes(app: FastifyInstance) {
             }
           }
 
+          // Lorebook Keeper agent → persist new/updated entries to the database
+          if (result.success && result.type === "lorebook_update" && result.data && typeof result.data === "object") {
+            try {
+              const lkData = result.data as Record<string, unknown>;
+              const updates = (lkData.updates as any[]) ?? [];
+              if (updates.length > 0) {
+                // Find a target lorebook: prefer first enabled lorebook, or auto-create one for this chat
+                let targetLorebookId: string | null = null;
+                if (agentContext.writableLorebookIds && agentContext.writableLorebookIds.length > 0) {
+                  targetLorebookId = agentContext.writableLorebookIds[0] ?? null;
+                } else {
+                  const created = await lorebooksStore.create({
+                    name: `Auto-generated (${chat.name || input.chatId})`,
+                    description: "Automatically created by the Lorebook Keeper agent",
+                    category: "uncategorized",
+                    chatId: input.chatId,
+                    enabled: true,
+                    generatedBy: "agent",
+                    sourceAgentId: "lorebook-keeper",
+                  });
+                  if (created) targetLorebookId = (created as any).id;
+                }
+
+                if (targetLorebookId) {
+                  // Load existing entries for update matching by name
+                  const existingEntries = await lorebooksStore.listEntries(targetLorebookId);
+                  const entryByName = new Map(existingEntries.map((e: any) => [e.name?.toLowerCase(), e]));
+
+                  for (const u of updates) {
+                    const name = (u.entryName as string) ?? "";
+                    const content = (u.content as string) ?? "";
+                    const keys = (u.keys as string[]) ?? [];
+                    const tag = (u.tag as string) ?? "";
+                    const action = (u.action as string) ?? "create";
+
+                    const existing = entryByName.get(name.toLowerCase());
+
+                    if (action === "update" && existing) {
+                      await lorebooksStore.updateEntry(existing.id, { content, keys, tag });
+                    } else {
+                      // Create new entry (or create if "update" target not found)
+                      await lorebooksStore.createEntry({
+                        lorebookId: targetLorebookId,
+                        name,
+                        content,
+                        keys,
+                        tag,
+                        enabled: true,
+                      });
+                    }
+                  }
+                }
+              }
+            } catch {
+              // Non-critical
+            }
+          }
+
           // Chat Summary agent → persist rolling summary to chat metadata
           if (result.success && result.type === "chat_summary" && result.data && typeof result.data === "object") {
             try {
@@ -1888,6 +2014,15 @@ export async function generateRoutes(app: FastifyInstance) {
         memory: {},
       };
 
+      // Populate writable lorebook IDs for lorebook-keeper retries
+      {
+        const enabledBooks = await lorebooksStore.list();
+        const enabledIds = enabledBooks
+          .filter((b: any) => b.enabled === true || b.enabled === "true")
+          .map((b: any) => b.id);
+        agentContext.writableLorebookIds = enabledIds;
+      }
+
       // Load game state
       const latestGS = await gameStateStore.getLatestCommitted(chatId);
       if (latestGS) {
@@ -2043,6 +2178,56 @@ export async function generateRoutes(app: FastifyInstance) {
               };
             }
             reply.raw.write(`data: ${JSON.stringify({ type: "game_state_patch", data: patchData })}\n\n`);
+          } catch {
+            /* Non-critical */
+          }
+        }
+        // Lorebook Keeper agent → persist entries on retry
+        if (result.success && result.type === "lorebook_update" && result.data && typeof result.data === "object") {
+          try {
+            const lkData = result.data as Record<string, unknown>;
+            const retryUpdates = (lkData.updates as any[]) ?? [];
+            if (retryUpdates.length > 0) {
+              let targetLorebookId: string | null = null;
+              if (agentContext.writableLorebookIds && agentContext.writableLorebookIds.length > 0) {
+                targetLorebookId = agentContext.writableLorebookIds[0] ?? null;
+              } else {
+                const created = await lorebooksStore.create({
+                  name: `Auto-generated (${(chat as any).name || chatId})`,
+                  description: "Automatically created by the Lorebook Keeper agent",
+                  category: "uncategorized",
+                  chatId: chatId ?? null,
+                  enabled: true,
+                  generatedBy: "agent",
+                  sourceAgentId: "lorebook-keeper",
+                });
+                if (created) targetLorebookId = (created as any).id;
+              }
+              if (targetLorebookId) {
+                const existingEntries = await lorebooksStore.listEntries(targetLorebookId);
+                const entryByName = new Map(existingEntries.map((e: any) => [e.name?.toLowerCase(), e]));
+                for (const u of retryUpdates) {
+                  const name = (u.entryName as string) ?? "";
+                  const content = (u.content as string) ?? "";
+                  const keys = (u.keys as string[]) ?? [];
+                  const tag = (u.tag as string) ?? "";
+                  const action = (u.action as string) ?? "create";
+                  const existing = entryByName.get(name.toLowerCase());
+                  if (action === "update" && existing) {
+                    await lorebooksStore.updateEntry(existing.id, { content, keys, tag });
+                  } else {
+                    await lorebooksStore.createEntry({
+                      lorebookId: targetLorebookId,
+                      name,
+                      content,
+                      keys,
+                      tag,
+                      enabled: true,
+                    });
+                  }
+                }
+              }
+            }
           } catch {
             /* Non-critical */
           }

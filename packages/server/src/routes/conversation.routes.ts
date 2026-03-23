@@ -408,6 +408,11 @@ export async function conversationRoutes(app: FastifyInstance) {
       return reply.send({ shouldTrigger: false, characterIds: [], reason: "not_group", inactivityMs: 0 });
     }
 
+    // Respect the characterExchanges toggle
+    if (!meta.characterExchanges) {
+      return reply.send({ shouldTrigger: false, characterIds: [], reason: "exchanges_disabled", inactivityMs: 0 });
+    }
+
     const schedules: CharacterSchedules = meta.characterSchedules ?? {};
     const messages = await chats.listMessages(chatId);
     initializeActivityFromMessages(

@@ -36,6 +36,7 @@ interface BusyDelayResult {
 export function useAutonomousMessaging(
   chatId: string | null,
   enabled: boolean,
+  exchangesEnabled: boolean,
   onAutonomousMessage?: (characterId: string) => void,
 ) {
   const { generate } = useGenerate();
@@ -161,7 +162,7 @@ export function useAutonomousMessaging(
       }
 
       // In group chats: check if another character wants to reply to what was just said
-      if (produced) {
+      if (produced && exchangesEnabled) {
         try {
           const exchange = await api.post<AutonomousCheckResult>("/conversation/autonomous/exchange", {
             chatId,
@@ -203,7 +204,7 @@ export function useAutonomousMessaging(
       if (pollTimerRef.current) clearTimeout(pollTimerRef.current);
       if (busyTimerRef.current) clearTimeout(busyTimerRef.current);
     };
-  }, [chatId, enabled, generate, recordAssistantActivity, qc]);
+  }, [chatId, enabled, exchangesEnabled, generate, recordAssistantActivity, qc]);
 
   return {
     recordUserActivity,

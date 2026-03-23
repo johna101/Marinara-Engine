@@ -135,6 +135,20 @@ export function useGenerate() {
       let rafId = 0;
       let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
+      // ── Streaming think-tag filter ──
+      // Models may emit <think>...</think> or <thinking>...</thinking> at the
+      // start of their response. We intercept these tokens during streaming so
+      // the user never sees the raw tags — the server will extract the content
+      // into message.extra.thinking and emit a content_replace event.
+      //
+      // States: "detect" (start of response, looking for opening tag),
+      //         "inside" (inside a think block, suppressing tokens),
+      //         "done" (think block closed or no think tag found — passthrough).
+      let thinkState: "detect" | "inside" | "done" = "detect";
+      let thinkBuf = ""; // Raw token accumulator during detect/inside phases
+      let thinkTagName = "think"; // Which variant was matched ("think" or "thinking")
+      const THINK_OPEN_RE = /^(\s*)<(think(?:ing)?)>/i;
+
       // Derive typewriter parameters from speed (1–100)
       // speed 1  → 1 char every 80ms  (very slow, easy to read)
       // speed 50 → ~2 chars every 16ms (moderate, default)
@@ -216,12 +230,60 @@ export function useGenerate() {
                 setTypingCharacterName(null); // Clear typing indicator once response starts
                 setDelayedCharacterInfo(null); // Clear delayed indicator too
               }
+
+              let chunk = event.data as string;
+
+              // ── Think-tag streaming filter ──
+              if (thinkState === "detect") {
+                // Still at the start — accumulate and look for an opening tag
+                thinkBuf += chunk;
+                const openMatch = thinkBuf.match(THINK_OPEN_RE);
+                if (openMatch) {
+                  // Found opening tag — enter suppression mode
+                  thinkState = "inside";
+                  thinkBuf = thinkBuf.slice(openMatch[0].length);
+                  thinkTagName = openMatch[2]!.toLowerCase();
+                  chunk = ""; // suppress
+                } else if (
+                  thinkBuf.length > 30 ||
+                  (!(
+                    "<thinking>".startsWith(thinkBuf.trimStart().toLowerCase()) ||
+                    "<think>".startsWith(thinkBuf.trimStart().toLowerCase())
+                  ) &&
+                    thinkBuf.trimStart().length > 0)
+                ) {
+                  // Not a think tag — flush accumulated buffer as regular content
+                  thinkState = "done";
+                  chunk = thinkBuf;
+                  thinkBuf = "";
+                } else {
+                  // Still ambiguous (partial tag like "<thi") — keep buffering
+                  chunk = "";
+                }
+              }
+
+              if (thinkState === "inside") {
+                thinkBuf += chunk;
+                const closeStr = `</${thinkTagName}>`;
+                const closeIdx = thinkBuf.toLowerCase().indexOf(closeStr.toLowerCase());
+                if (closeIdx !== -1) {
+                  // Found closing tag — everything after it is visible content
+                  thinkState = "done";
+                  chunk = thinkBuf.slice(closeIdx + closeStr.length).trimStart();
+                  thinkBuf = "";
+                } else {
+                  chunk = ""; // still inside — suppress
+                }
+              }
+
+              if (!chunk) break;
+
               if (streamingEnabled) {
-                pendingText += event.data as string;
+                pendingText += chunk;
                 startTypewriter();
               } else {
                 // Accumulate silently — don't update the UI until done
-                fullBuffer += event.data as string;
+                fullBuffer += chunk;
               }
               break;
             }
@@ -482,6 +544,9 @@ export function useGenerate() {
                 // Reset the stream buffer for the new character
                 fullBuffer = "";
                 pendingText = "";
+                thinkState = "detect";
+                thinkBuf = "";
+                thinkTagName = "think";
                 if (isActiveChat()) setStreamBuffer("");
               }
 

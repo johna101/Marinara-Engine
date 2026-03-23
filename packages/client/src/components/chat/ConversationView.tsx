@@ -165,9 +165,11 @@ export function ConversationView({
     [chatId, characterMap],
   );
 
+  const exchangesEnabled = !!chatMeta.characterExchanges;
   const { recordUserActivity, recordAssistantActivity, ensureSchedules } = useAutonomousMessaging(
     chatId,
     autonomousEnabled,
+    exchangesEnabled,
     handleAutonomousMessage,
   );
 

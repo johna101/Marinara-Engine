@@ -859,8 +859,8 @@ export function ChatSettingsDrawer({ chat, open, onClose }: ChatSettingsDrawerPr
               ))}
           </Section>
 
-          {/* Group Chat Settings — only when 2+ characters */}
-          {chatCharIds.length > 1 && (
+          {/* Group Chat Settings — only when 2+ characters, roleplay only (conversations always use merged) */}
+          {chatCharIds.length > 1 && !isConversation && (
             <Section
               label="Group Chat"
               icon={<Users size="0.875rem" />}

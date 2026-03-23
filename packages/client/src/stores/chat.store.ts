@@ -116,7 +116,8 @@ export const useChatStore = create<ChatState>()(
       if (id !== prev) {
         useAgentStore.getState().reset();
         useGameStateStore.getState().setGameState(null);
-        useUIStore.getState().setChatBackground(null);
+        // Background is NOT cleared here — it's managed by ChatArea's restore effect.
+        // Clearing it would cause a black flash and wipe the background for new chats.
         // Restore per-chat typing/delayed indicators for the newly active chat
         if (id) {
           const { perChatTyping, perChatDelayed, abortControllers } = get();

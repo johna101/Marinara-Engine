@@ -1292,93 +1292,91 @@ export function ChatSettingsDrawer({ chat, open, onClose }: ChatSettingsDrawerPr
             </Section>
           )}
 
-          {/* Lorebooks — hidden for conversation mode */}
-          {!isConversation && (
-            <Section
-              label="Lorebooks"
-              icon={<BookOpen size="0.875rem" />}
-              count={activeLorebookIds.length}
-              help="Lorebooks contain world info, character backstories, and lore that gets injected into the AI's context when relevant keywords appear."
-            >
-              {/* Active lorebooks */}
-              {activeLorebookIds.length === 0 ? (
-                <p className="text-[0.6875rem] text-[var(--muted-foreground)]">No lorebooks added to this chat.</p>
-              ) : (
-                <div className="flex flex-col gap-1">
-                  {activeLorebookIds.map((lbId) => {
-                    const lb = (lorebooks ?? []).find((l: { id: string }) => l.id === lbId) as
-                      | { id: string; name: string }
-                      | undefined;
-                    if (!lb) return null;
-                    return (
-                      <div
-                        key={lb.id}
-                        className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-3 py-2 ring-1 ring-[var(--primary)]/30"
-                      >
-                        <BookOpen size="0.875rem" className="text-[var(--primary)]" />
-                        <span className="flex-1 truncate text-xs">{lb.name}</span>
-                        <button
-                          onClick={() => toggleLorebook(lb.id)}
-                          className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
-                          title="Remove from chat"
-                        >
-                          <Trash2 size="0.6875rem" />
-                        </button>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Add lorebook picker */}
-              {!showLbPicker ? (
-                <button
-                  onClick={() => {
-                    setShowLbPicker(true);
-                    setLbSearch("");
-                  }}
-                  className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
-                >
-                  <Plus size="0.75rem" /> Add Lorebook
-                </button>
-              ) : (
-                <PickerDropdown
-                  search={lbSearch}
-                  onSearchChange={setLbSearch}
-                  onClose={() => setShowLbPicker(false)}
-                  placeholder="Search lorebooks…"
-                >
-                  {((lorebooks ?? []) as Array<{ id: string; name: string }>)
-                    .filter((lb) => !activeLorebookIds.includes(lb.id))
-                    .filter((lb) => lb.name.toLowerCase().includes(lbSearch.toLowerCase()))
-                    .map((lb) => (
+          {/* Lorebooks */}
+          <Section
+            label="Lorebooks"
+            icon={<BookOpen size="0.875rem" />}
+            count={activeLorebookIds.length}
+            help="Lorebooks contain world info, character backstories, and lore that gets injected into the AI's context when relevant keywords appear."
+          >
+            {/* Active lorebooks */}
+            {activeLorebookIds.length === 0 ? (
+              <p className="text-[0.6875rem] text-[var(--muted-foreground)]">No lorebooks added to this chat.</p>
+            ) : (
+              <div className="flex flex-col gap-1">
+                {activeLorebookIds.map((lbId) => {
+                  const lb = (lorebooks ?? []).find((l: { id: string }) => l.id === lbId) as
+                    | { id: string; name: string }
+                    | undefined;
+                  if (!lb) return null;
+                  return (
+                    <div
+                      key={lb.id}
+                      className="flex items-center gap-2.5 rounded-lg bg-[var(--primary)]/10 px-3 py-2 ring-1 ring-[var(--primary)]/30"
+                    >
+                      <BookOpen size="0.875rem" className="text-[var(--primary)]" />
+                      <span className="flex-1 truncate text-xs">{lb.name}</span>
                       <button
-                        key={lb.id}
-                        onClick={() => {
-                          toggleLorebook(lb.id);
-                          setShowLbPicker(false);
-                        }}
-                        className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
+                        onClick={() => toggleLorebook(lb.id)}
+                        className="flex h-5 w-5 items-center justify-center rounded-md text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/15 hover:text-[var(--destructive)]"
+                        title="Remove from chat"
                       >
-                        <BookOpen size="0.875rem" className="text-[var(--muted-foreground)]" />
-                        <span className="flex-1 truncate text-xs">{lb.name}</span>
-                        <Plus size="0.75rem" className="text-[var(--muted-foreground)]" />
+                        <Trash2 size="0.6875rem" />
                       </button>
-                    ))}
-                  {((lorebooks ?? []) as Array<{ id: string; name: string }>)
-                    .filter((lb) => !activeLorebookIds.includes(lb.id))
-                    .filter((lb) => lb.name.toLowerCase().includes(lbSearch.toLowerCase())).length === 0 && (
-                    <p className="px-3 py-2 text-[0.6875rem] text-[var(--muted-foreground)]">
-                      {((lorebooks ?? []) as Array<{ id: string }>).filter((lb) => !activeLorebookIds.includes(lb.id))
-                        .length === 0
-                        ? "All lorebooks already added."
-                        : "No matches."}
-                    </p>
-                  )}
-                </PickerDropdown>
-              )}
-            </Section>
-          )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Add lorebook picker */}
+            {!showLbPicker ? (
+              <button
+                onClick={() => {
+                  setShowLbPicker(true);
+                  setLbSearch("");
+                }}
+                className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
+              >
+                <Plus size="0.75rem" /> Add Lorebook
+              </button>
+            ) : (
+              <PickerDropdown
+                search={lbSearch}
+                onSearchChange={setLbSearch}
+                onClose={() => setShowLbPicker(false)}
+                placeholder="Search lorebooks…"
+              >
+                {((lorebooks ?? []) as Array<{ id: string; name: string }>)
+                  .filter((lb) => !activeLorebookIds.includes(lb.id))
+                  .filter((lb) => lb.name.toLowerCase().includes(lbSearch.toLowerCase()))
+                  .map((lb) => (
+                    <button
+                      key={lb.id}
+                      onClick={() => {
+                        toggleLorebook(lb.id);
+                        setShowLbPicker(false);
+                      }}
+                      className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
+                    >
+                      <BookOpen size="0.875rem" className="text-[var(--muted-foreground)]" />
+                      <span className="flex-1 truncate text-xs">{lb.name}</span>
+                      <Plus size="0.75rem" className="text-[var(--muted-foreground)]" />
+                    </button>
+                  ))}
+                {((lorebooks ?? []) as Array<{ id: string; name: string }>)
+                  .filter((lb) => !activeLorebookIds.includes(lb.id))
+                  .filter((lb) => lb.name.toLowerCase().includes(lbSearch.toLowerCase())).length === 0 && (
+                  <p className="px-3 py-2 text-[0.6875rem] text-[var(--muted-foreground)]">
+                    {((lorebooks ?? []) as Array<{ id: string }>).filter((lb) => !activeLorebookIds.includes(lb.id))
+                      .length === 0
+                      ? "All lorebooks already added."
+                      : "No matches."}
+                  </p>
+                )}
+              </PickerDropdown>
+            )}
+          </Section>
 
           {/* Agents — hidden for conversation mode */}
           {!isConversation && (

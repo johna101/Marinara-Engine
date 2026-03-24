@@ -27,6 +27,7 @@ import { createAgentsStorage } from "../services/storage/agents.storage.js";
 import { createGameStateStorage } from "../services/storage/game-state.storage.js";
 import { createCustomToolsStorage } from "../services/storage/custom-tools.storage.js";
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
+import { processLorebooks } from "../services/lorebook/index.js";
 import { createLLMProvider } from "../services/llm/provider-registry.js";
 import { assemblePrompt, type AssemblerInput } from "../services/prompt/index.js";
 import { mergeAdjacentMessages } from "../services/prompt/merger.js";
@@ -1066,6 +1067,30 @@ export async function generateRoutes(app: FastifyInstance) {
           ...(connectedRpBlock ? [{ role: "user" as const, content: connectedRpBlock }] : []),
           { role: "user" as const, content: contextBlock },
         ];
+
+        // ── Lorebook injection for conversation mode ──
+        if (chatActiveLorebookIds.length > 0) {
+          const scanMessages = mappedMessages.map((m) => ({
+            role: m.role as "user" | "assistant" | "system",
+            content: m.content,
+          }));
+          const lorebookResult = await processLorebooks(app.db, scanMessages, null, {
+            chatId: input.chatId,
+            characterIds,
+            activeLorebookIds: chatActiveLorebookIds,
+            chatEmbedding: chatContextEmbedding,
+          });
+          const loreContent = [lorebookResult.worldInfoBefore, lorebookResult.worldInfoAfter]
+            .filter(Boolean)
+            .join("\n");
+          if (loreContent) {
+            const loreBlock = `<lore>\n${loreContent}\n</lore>`;
+            // Inject before the awareness block (or before first user/assistant message)
+            const firstUserIdx = finalMessages.findIndex((m) => m.role === "user" || m.role === "assistant");
+            const insertAt = firstUserIdx >= 0 ? firstUserIdx : finalMessages.length;
+            finalMessages.splice(insertAt, 0, { role: "system" as const, content: loreBlock });
+          }
+        }
       }
 
       // ── Roleplay: inject pending OOC influences from connected conversation ──

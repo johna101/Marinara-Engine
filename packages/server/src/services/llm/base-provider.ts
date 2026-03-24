@@ -143,11 +143,11 @@ export abstract class BaseLLMProvider {
 
   /**
    * Generate embeddings for one or more texts.
-   * Default implementation calls the OpenAI-compatible /v1/embeddings endpoint.
+   * Default implementation calls the OpenAI-compatible /embeddings endpoint.
    * Override in provider subclasses that use a different API shape.
    */
   async embed(texts: string[], model: string): Promise<number[][]> {
-    const res = await fetch(`${this.baseUrl}/v1/embeddings`, {
+    const res = await fetch(`${this.baseUrl}/embeddings`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

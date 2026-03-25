@@ -24,9 +24,16 @@ export function ImportPresetModal({ open, onClose }: Props) {
     try {
       const text = await file.text();
       const json = JSON.parse(text);
-      json.__filename = file.name.replace(/\.json$/i, "");
 
-      const res = await fetch("/api/import/st-preset", {
+      // Detect Marinara native export format vs SillyTavern format
+      const isMarinara = json.type === "marinara_preset" && json.version === 1;
+      const endpoint = isMarinara ? "/api/import/marinara" : "/api/import/st-preset";
+
+      if (!isMarinara) {
+        json.__filename = file.name.replace(/\.json$/i, "");
+      }
+
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(json),

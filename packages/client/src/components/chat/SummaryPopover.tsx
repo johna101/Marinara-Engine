@@ -77,7 +77,7 @@ export function SummaryPopover({ chatId, summary, onClose }: SummaryPopoverProps
       ref={panelRef}
       className={cn(
         isMobile
-          ? "fixed inset-0 z-[9999] flex items-center justify-center p-4"
+          ? "fixed inset-0 z-[9999] flex items-center justify-center p-4 max-md:pt-[max(1rem,env(safe-area-inset-top))]"
           : "absolute right-0 top-full z-[100] mt-1",
       )}
     >

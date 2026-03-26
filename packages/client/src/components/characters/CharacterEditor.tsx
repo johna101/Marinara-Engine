@@ -1386,24 +1386,13 @@ function StatsTab({
                 <span className="text-xs font-semibold">Hit Points (HP)</span>
               </div>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={stats.hp.value}
-                  onChange={(e) => update({ hp: { ...stats.hp, value: parseInt(e.target.value) || 0 } })}
-                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                />
-                <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                <span className="text-xs text-[var(--muted-foreground)]">Max:</span>
                 <input
                   type="number"
                   value={stats.hp.max}
                   onChange={(e) => update({ hp: { ...stats.hp, max: parseInt(e.target.value) || 1 } })}
                   className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                />
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-black/30">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-red-600 to-red-400 transition-all"
-                  style={{ width: `${Math.min(100, (stats.hp.value / Math.max(1, stats.hp.max)) * 100)}%` }}
+                  min={1}
                 />
               </div>
             </div>
@@ -1414,24 +1403,13 @@ function StatsTab({
                 <span className="text-xs font-semibold">Mana Points (MP)</span>
               </div>
               <div className="flex items-center gap-2">
-                <input
-                  type="number"
-                  value={stats.mp.value}
-                  onChange={(e) => update({ mp: { ...stats.mp, value: parseInt(e.target.value) || 0 } })}
-                  className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                />
-                <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                <span className="text-xs text-[var(--muted-foreground)]">Max:</span>
                 <input
                   type="number"
                   value={stats.mp.max}
                   onChange={(e) => update({ mp: { ...stats.mp, max: parseInt(e.target.value) || 1 } })}
                   className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                />
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-black/30">
-                <div
-                  className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all"
-                  style={{ width: `${Math.min(100, (stats.mp.value / Math.max(1, stats.mp.max)) * 100)}%` }}
+                  min={1}
                 />
               </div>
             </div>

@@ -3,7 +3,7 @@
 // ──────────────────────────────────────────────
 import { useState, useMemo } from "react";
 import { usePresets, useDeletePreset, useDuplicatePreset } from "../../hooks/use-presets";
-import { useUpdateChat } from "../../hooks/use-chats";
+import { useUpdateChat, useUpdateChatMetadata } from "../../hooks/use-chats";
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
 import { ChoiceSelectionModal } from "../presets/ChoiceSelectionModal";
@@ -28,6 +28,7 @@ export function PresetsPanel() {
   const openPresetDetail = useUIStore((s) => s.openPresetDetail);
   const activeChat = useChatStore((s) => s.activeChat);
   const updateChat = useUpdateChat();
+  const updateMetadata = useUpdateChatMetadata();
   const [search, setSearch] = useState("");
   const [choiceModalPresetId, setChoiceModalPresetId] = useState<string | null>(null);
 
@@ -48,6 +49,8 @@ export function PresetsPanel() {
   const selectPreset = (presetId: string) => {
     if (!activeChat) return;
     const newId = activePresetId === presetId ? null : presetId;
+    // Clear stale preset choices from the previous preset before switching
+    updateMetadata.mutate({ id: activeChat.id, presetChoices: {} });
     updateChat.mutate(
       { id: activeChat.id, promptPresetId: newId },
       {

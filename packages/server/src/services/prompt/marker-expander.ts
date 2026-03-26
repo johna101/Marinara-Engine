@@ -25,6 +25,8 @@ export interface MarkerContext {
     backstory?: string;
     appearance?: string;
   };
+  /** Raw personaStats JSON (for rpgStats injection) */
+  personaStats?: any;
   chatMessages: ChatMLMessage[];
   chatSummary: string | null;
   wrapFormat: WrapFormat;
@@ -36,6 +38,8 @@ export interface MarkerContext {
   activeLorebookIds: string[];
   /** Pre-computed embedding of the chat context for semantic lorebook matching. */
   chatEmbedding?: number[] | null;
+  /** Collector for lorebook depth entries — populated during expansion, consumed by the assembler. */
+  lorebookDepthEntries?: Array<{ content: string; role: "system" | "user" | "assistant"; depth: number }>;
 }
 
 /** Expanded marker result. */
@@ -175,6 +179,15 @@ async function expandPersona(_config: MarkerConfig, ctx: MarkerContext): Promise
     parts.push(wrapContent(ctx.personaFields.scenario, "scenario", ctx.wrapFormat, 2));
   }
 
+  // Include RPG attributes if enabled
+  if (ctx.personaStats?.rpgStats?.enabled) {
+    const rpg = ctx.personaStats.rpgStats as RPGStatsConfig;
+    const statsText = formatRPGStats(rpg);
+    if (statsText) {
+      parts.push(wrapContent(statsText, "rpg_attributes", ctx.wrapFormat, 2));
+    }
+  }
+
   if (parts.length === 0) return { content: "" };
 
   return {
@@ -191,6 +204,14 @@ async function expandLorebook(config: MarkerConfig, ctx: MarkerContext): Promise
     activeLorebookIds: ctx.activeLorebookIds,
     chatEmbedding: ctx.chatEmbedding ?? null,
   });
+
+  // Collect depth entries for the assembler to inject later
+  if (result.depthEntries.length > 0) {
+    ctx.lorebookDepthEntries ??= [];
+    for (const de of result.depthEntries) {
+      ctx.lorebookDepthEntries.push({ content: de.content, role: de.role, depth: de.depth });
+    }
+  }
 
   switch (config.type) {
     case "world_info_before":

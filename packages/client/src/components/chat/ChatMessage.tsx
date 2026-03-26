@@ -1200,7 +1200,7 @@ export const ChatMessage = memo(function ChatMessage({
 // ── Thinking modal ──
 function ThinkingModal({ thinking, onClose }: { thinking: string; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 max-md:pt-[env(safe-area-inset-top)]" onClick={onClose}>
       <div
         className="relative mx-4 flex max-h-[70vh] w-full max-w-xl flex-col rounded-xl bg-[var(--card)] shadow-2xl ring-1 ring-[var(--border)]"
         onClick={(e) => e.stopPropagation()}

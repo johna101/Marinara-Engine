@@ -442,7 +442,7 @@ export const ConversationMessage = memo(function ConversationMessage({
         {/* Thinking modal */}
         {showThinking && thinking && (
           <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 max-md:pt-[env(safe-area-inset-top)]"
             onClick={() => setShowThinking(false)}
           >
             <div
@@ -647,7 +647,7 @@ export const ConversationMessage = memo(function ConversationMessage({
       {/* Thinking modal */}
       {showThinking && thinking && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 max-md:pt-[env(safe-area-inset-top)]"
           onClick={() => setShowThinking(false)}
         >
           <div

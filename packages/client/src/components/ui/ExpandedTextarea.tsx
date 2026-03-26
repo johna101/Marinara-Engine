@@ -38,7 +38,7 @@ export function ExpandedTextarea({ open, onClose, title, value, onChange, placeh
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[100] flex flex-col bg-[var(--background)]"
+          className="fixed inset-0 z-[100] flex flex-col bg-[var(--background)] max-md:pt-[env(safe-area-inset-top)]"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

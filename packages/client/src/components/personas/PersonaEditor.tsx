@@ -541,10 +541,10 @@ const DEFAULT_RPG_STATS: PersonaRPGStats = {
 const DEFAULT_PERSONA_STATS: PersonaStatsData = {
   enabled: false,
   bars: [
-    { name: "Satiety", value: 80, max: 100, color: "#f59e0b" },
-    { name: "Energy", value: 90, max: 100, color: "#22c55e" },
-    { name: "Hygiene", value: 95, max: 100, color: "#3b82f6" },
-    { name: "Mood", value: 75, max: 100, color: "#ec4899" },
+    { name: "Satiety", value: 100, max: 100, color: "#f59e0b" },
+    { name: "Energy", value: 100, max: 100, color: "#22c55e" },
+    { name: "Hygiene", value: 100, max: 100, color: "#3b82f6" },
+    { name: "Mood", value: 100, max: 100, color: "#ec4899" },
   ],
   rpgStats: DEFAULT_RPG_STATS,
 };
@@ -577,7 +577,7 @@ function PersonaStatsTab({
   };
 
   const addBar = () => {
-    save({ ...parsed, bars: [...parsed.bars, { name: "New Stat", value: 50, max: 100, color: "#8b5cf6" }] });
+    save({ ...parsed, bars: [...parsed.bars, { name: "New Stat", value: 100, max: 100, color: "#8b5cf6" }] });
   };
 
   const removeBar = (index: number) => {
@@ -659,15 +659,7 @@ function PersonaStatsTab({
                       className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-xs font-medium"
                       placeholder="Stat name"
                     />
-                    <input
-                      type="number"
-                      value={bar.value}
-                      onChange={(e) => updateBar(i, "value", parseInt(e.target.value) || 0)}
-                      className="w-14 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1 text-center text-xs"
-                      min={0}
-                      max={bar.max}
-                    />
-                    <span className="text-[0.625rem] text-[var(--muted-foreground)]">/</span>
+                    <span className="text-[0.625rem] text-[var(--muted-foreground)]">max:</span>
                     <input
                       type="number"
                       value={bar.max}
@@ -681,15 +673,6 @@ function PersonaStatsTab({
                     >
                       <X size="0.75rem" />
                     </button>
-                  </div>
-                  <div className="h-2 overflow-hidden rounded-full bg-black/30">
-                    <div
-                      className="h-full rounded-full transition-all"
-                      style={{
-                        width: `${Math.min(100, (bar.value / Math.max(1, bar.max)) * 100)}%`,
-                        backgroundColor: bar.color,
-                      }}
-                    />
                   </div>
                 </div>
               ))}
@@ -750,24 +733,13 @@ function PersonaStatsTab({
                   <span className="text-xs font-semibold">Hit Points (HP)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={rpgStats.hp.value}
-                    onChange={(e) => updateRpg({ hp: { ...rpgStats.hp, value: parseInt(e.target.value) || 0 } })}
-                    className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                  />
-                  <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                  <span className="text-xs text-[var(--muted-foreground)]">Max:</span>
                   <input
                     type="number"
                     value={rpgStats.hp.max}
                     onChange={(e) => updateRpg({ hp: { ...rpgStats.hp, max: parseInt(e.target.value) || 1 } })}
                     className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                  />
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-black/30">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-red-600 to-red-400 transition-all"
-                    style={{ width: `${Math.min(100, (rpgStats.hp.value / Math.max(1, rpgStats.hp.max)) * 100)}%` }}
+                    min={1}
                   />
                 </div>
               </div>
@@ -778,24 +750,13 @@ function PersonaStatsTab({
                   <span className="text-xs font-semibold">Mana Points (MP)</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={rpgStats.mp.value}
-                    onChange={(e) => updateRpg({ mp: { ...rpgStats.mp, value: parseInt(e.target.value) || 0 } })}
-                    className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                  />
-                  <span className="text-xs text-[var(--muted-foreground)]">/</span>
+                  <span className="text-xs text-[var(--muted-foreground)]">Max:</span>
                   <input
                     type="number"
                     value={rpgStats.mp.max}
                     onChange={(e) => updateRpg({ mp: { ...rpgStats.mp, max: parseInt(e.target.value) || 1 } })}
                     className="w-20 rounded-lg border border-[var(--border)] bg-[var(--input)] px-2 py-1.5 text-center text-sm"
-                  />
-                </div>
-                <div className="h-2 overflow-hidden rounded-full bg-black/30">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-blue-600 to-blue-400 transition-all"
-                    style={{ width: `${Math.min(100, (rpgStats.mp.value / Math.max(1, rpgStats.mp.max)) * 100)}%` }}
+                    min={1}
                   />
                 </div>
               </div>

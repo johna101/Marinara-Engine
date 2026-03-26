@@ -5,6 +5,11 @@ import type { BaseLLMProvider, ChatMessage, LLMToolDefinition, LLMToolCall } fro
 import type { AgentResult, AgentContext, AgentResultType } from "@marinara-engine/shared";
 import { getDefaultAgentPrompt } from "@marinara-engine/shared";
 
+/** Strip HTML/XML-style tags (e.g. <div style="..."> <br> <speaker>) from text to save tokens. */
+function stripHtmlTags(text: string): string {
+  return text.replace(/<[^>]+>/g, "").replace(/\n{3,}/g, "\n\n").trim();
+}
+
 /** Minimal agent config needed for execution. */
 export interface AgentExecConfig {
   id: string;
@@ -36,14 +41,31 @@ export async function executeAgent(
   const startTime = Date.now();
 
   try {
-    // Build the agent's system prompt
+    // Build the agent's system prompt with <role> + <lore> + <agents> + extras
     const template = config.promptTemplate || getDefaultAgentPrompt(config.type);
     if (!template) {
       return makeError(config, "No prompt template configured", startTime);
     }
 
+    const systemParts: string[] = [];
+    systemParts.push(`<role>`);
+    systemParts.push(`You are a specialized agent. Fulfill your task and return the requested output.`);
+    systemParts.push(`</role>`);
+    systemParts.push(``);
+    systemParts.push(buildLoreBlock(context));
+    systemParts.push(``);
+    systemParts.push(`<agents>`);
+    systemParts.push(`Fulfill the requested task here and return the output in the format specified:`);
+    systemParts.push(template);
+    systemParts.push(`</agents>`);
+    const extras = buildAgentExtras(context);
+    if (extras) {
+      systemParts.push(``);
+      systemParts.push(extras);
+    }
+
     // Build multi-turn message array for this agent
-    const messages = buildAgentMessages(template, context, config.type);
+    const messages = buildAgentMessages(systemParts.join("\n"), context, config.type);
 
     // Agents use lower temperature for reliability
     const temperature = (config.settings.temperature as number) ?? 0.3;
@@ -218,8 +240,8 @@ export async function executeAgentBatch(
   const startTime = Date.now();
 
   try {
-    // Build merged system prompt
-    const systemPrompt = buildBatchSystemPrompt(configs);
+    // Build merged system prompt (includes lore + agent extras)
+    const systemPrompt = buildBatchSystemPrompt(configs, context);
     const messages = buildAgentMessages(systemPrompt, context, "__batch__");
 
     // Each agent needs enough room for its full JSON output.
@@ -302,50 +324,55 @@ export async function executeAgentBatch(
 }
 
 /**
- * Build a combined system prompt that instructs the model to produce
- * output for all agents in clearly delimited sections.
+ * Build a combined system prompt for a batch of agents.
+ * Structure: <role> + <lore> + <agents> + extras
  */
-function buildBatchSystemPrompt(configs: AgentExecConfig[]): string {
+function buildBatchSystemPrompt(configs: AgentExecConfig[], context: AgentContext): string {
   const parts: string[] = [];
 
-  parts.push(
-    `You are a multi-purpose analysis agent that combines the roles of ${configs.length} specialized agents into a SINGLE response.`,
-    `You MUST perform ALL of the following tasks and output results in the exact XML format shown below.`,
-    ``,
-    `─── YOUR TASKS ───`,
-  );
+  // ── Role ──
+  parts.push(`<role>`);
+  parts.push(`You are a collection of ${configs.length} specialized agents. Fulfill all tasks and return all requested outputs.`);
+  parts.push(`You MUST wrap each task's output in a <result> tag with the agent ID. Output ALL ${configs.length} result blocks.`);
+  parts.push(`</role>`);
 
+  // ── Lore ──
+  parts.push(``);
+  parts.push(buildLoreBlock(context));
+
+  // ── Agents ──
+  parts.push(``);
+  parts.push(`<agents>`);
+  parts.push(`Fulfill each of the requested tasks here and return the outputs in the formats they're specified:`);
   for (const config of configs) {
     const template = config.promptTemplate || getDefaultAgentPrompt(config.type);
-    parts.push(``, `<agent_task id="${config.type}" name="${config.name}">`, template, `</agent_task>`);
+    parts.push(``);
+    parts.push(`<agent_task id="${config.type}" name="${config.name}">`);
+    parts.push(template);
+    parts.push(`</agent_task>`);
+  }
+  parts.push(`</agents>`);
+
+  // ── Agent-specific extras (sprites, backgrounds, etc.) ──
+  const extras = buildAgentExtras(context);
+  if (extras) {
+    parts.push(``);
+    parts.push(extras);
   }
 
-  parts.push(
-    ``,
-    `─── REQUIRED OUTPUT FORMAT ───`,
-    `You MUST wrap each task's output in a <result> tag with the agent ID. Output ALL ${configs.length} result blocks:`,
-    ``,
-  );
-
+  // ── Output format ──
+  parts.push(``);
+  parts.push(`─── REQUIRED OUTPUT FORMAT ───`);
   for (const config of configs) {
     const isJson = JSON_AGENTS.has(config.type);
     parts.push(
       `<result agent="${config.type}">`,
       isJson ? `{ ... valid JSON ... }` : `... your text output ...`,
       `</result>`,
-      ``,
     );
   }
-
-  parts.push(
-    `CRITICAL RULES:`,
-    `- You MUST output ALL ${configs.length} <result> blocks. Missing any is a failure. Count them before finishing.`,
-    `- Use the exact agent IDs: ${configs.map((c) => c.type).join(", ")}.`,
-    `- JSON agents MUST output valid JSON (no markdown fences inside the tags).`,
-    `- Text agents output plain text.`,
-    `- Do not add any text outside the <result> blocks.`,
-    `- CHECKLIST — verify you included ALL of these before stopping: ${configs.map((c) => `<result agent="${c.type}">`).join(" , ")}`,
-  );
+  parts.push(``);
+  parts.push(`CRITICAL: Output ALL ${configs.length} result blocks. Use exact agent IDs: ${configs.map((c) => c.type).join(", ")}. JSON agents must output valid JSON (no markdown fences). No text outside <result> blocks.`);
 
   return parts.join("\n");
 }
@@ -449,124 +476,24 @@ export function extractErrorMessage(err: unknown, fallback = "Agent execution fa
 /**
  * Build the full multi-turn message array for an agent call.
  *
- * Layout:
- *   1. System   — the agent's own prompt template (or merged batch prompt)
- *   2. User     — structured context (characters, persona, game state, memory, …)
- *   3. User/Assistant turns — recent chat history as proper multi-turn messages,
- *      with committed tracker data appended to assistant messages
- *   4. User     — final instruction (assistant response for post-processing, agent results, etc.)
+ * Layout (matches the canonical agent prompt structure):
+ *
+ *   SYSTEM MESSAGE:
+ *     <role> ... </role>
+ *     <lore> lorebook entries, characters, persona </lore>
+ *     <agents> agent instructions </agents>
+ *     (plus any agent-specific context: sprites, backgrounds, source material, etc.)
+ *
+ *   USER/ASSISTANT MESSAGES:
+ *     Recent chat history as proper multi-turn messages
+ *     (committed tracker state appended to last 3 assistant messages)
+ *
+ *   FINAL USER MESSAGE:
+ *     assistant_response (if post-processing) + "Now return the requested format(s)."
  */
 function buildAgentMessages(systemPrompt: string, context: AgentContext, agentType: string): ChatMessage[] {
+  // ── 1. System message — already contains <role>, <lore>, <agents>, and extras ──
   const messages: ChatMessage[] = [{ role: "system", content: systemPrompt }];
-
-  // ── 1. Structured context (user message) ──
-  const ctxParts: string[] = [];
-
-  ctxParts.push(`<chat_info>`);
-  ctxParts.push(`Chat ID: ${context.chatId}`);
-  ctxParts.push(`Mode: ${context.chatMode}`);
-  ctxParts.push(`</chat_info>`);
-
-  if (context.characters.length > 0) {
-    ctxParts.push(`\n<characters>`);
-    for (const char of context.characters) {
-      ctxParts.push(`- ${char.name}: ${char.description.slice(0, 2000)}`);
-    }
-    ctxParts.push(`</characters>`);
-  }
-
-  if (context.persona) {
-    ctxParts.push(`\n<user_persona>`);
-    ctxParts.push(`Name: ${context.persona.name}`);
-    if (context.persona.description) ctxParts.push(context.persona.description.slice(0, 2000));
-    if (context.persona.personaStats?.enabled && context.persona.personaStats.bars.length > 0) {
-      ctxParts.push(`\nConfigured persona stat bars:`);
-      for (const bar of context.persona.personaStats.bars) {
-        ctxParts.push(`- ${bar.name}: ${bar.value}/${bar.max} (color: ${bar.color})`);
-      }
-    }
-    ctxParts.push(`</user_persona>`);
-  }
-
-  if (context.gameState) {
-    ctxParts.push(`\n<current_game_state>`);
-    ctxParts.push(JSON.stringify(context.gameState));
-    ctxParts.push(`</current_game_state>`);
-  }
-
-  if (Object.keys(context.memory).length > 0) {
-    ctxParts.push(`\n<agent_memory>`);
-    ctxParts.push(JSON.stringify(context.memory));
-    ctxParts.push(`</agent_memory>`);
-  }
-
-  if (context.activatedLorebookEntries && context.activatedLorebookEntries.length > 0) {
-    ctxParts.push(`\n<lorebook_entries>`);
-    for (const entry of context.activatedLorebookEntries) {
-      ctxParts.push(`[${entry.tag}] ${entry.name}: ${entry.content}`);
-    }
-    ctxParts.push(`</lorebook_entries>`);
-  }
-
-  if (context.memory._availableSprites) {
-    const sprites = context.memory._availableSprites as Array<{
-      characterId: string;
-      characterName: string;
-      expressions: string[];
-    }>;
-    ctxParts.push(`\n<available_sprites>`);
-    for (const char of sprites) {
-      ctxParts.push(`${char.characterName} (${char.characterId}): ${char.expressions.join(", ")}`);
-    }
-    ctxParts.push(`</available_sprites>`);
-  }
-
-  if ((agentType === "background" || agentType === "__batch__") && context.memory._availableBackgrounds) {
-    const bgs = context.memory._availableBackgrounds as Array<{
-      filename: string;
-      originalName?: string | null;
-      tags: string[];
-    }>;
-    ctxParts.push(`\n<available_backgrounds>`);
-    for (const bg of bgs) {
-      const label = bg.originalName ? `${bg.filename} (${bg.originalName})` : bg.filename;
-      const tagStr = bg.tags.length > 0 ? ` [tags: ${bg.tags.join(", ")}]` : "";
-      ctxParts.push(`- ${label}${tagStr}`);
-    }
-    ctxParts.push(`</available_backgrounds>`);
-    if (context.memory._currentBackground) {
-      ctxParts.push(`\n<current_background>${context.memory._currentBackground}</current_background>`);
-    }
-  }
-
-  if (context.memory._sourceMaterial) {
-    const material = context.memory._sourceMaterial as string;
-    ctxParts.push(`\n<source_material>`);
-    ctxParts.push(material);
-    ctxParts.push(`</source_material>`);
-  }
-
-  if (context.memory._chunkInfo) {
-    const info = context.memory._chunkInfo as { current: number; total: number };
-    ctxParts.push(
-      `\n<chunk_info>Chunk ${info.current} of ${info.total} — extract relevant information from this chunk.</chunk_info>`,
-    );
-  }
-
-  if (context.memory._previousExtractions) {
-    const extractions = context.memory._previousExtractions as string[];
-    ctxParts.push(`\n<previous_extractions>`);
-    ctxParts.push(
-      `The following relevant excerpts were extracted from prior chunks of the same source material. Consolidate them into a single, coherent summary along with any new relevant information from the current chunk.`,
-    );
-    for (let i = 0; i < extractions.length; i++) {
-      ctxParts.push(`\n--- Chunk ${i + 1} ---`);
-      ctxParts.push(extractions[i]!);
-    }
-    ctxParts.push(`</previous_extractions>`);
-  }
-
-  messages.push({ role: "user", content: ctxParts.join("\n") });
 
   // ── 2. Chat history as proper multi-turn messages ──
   if (context.recentMessages.length > 0) {
@@ -582,7 +509,7 @@ function buildAgentMessages(systemPrompt: string, context: AgentContext, agentTy
     for (let msgIdx = 0; msgIdx < context.recentMessages.length; msgIdx++) {
       const msg = context.recentMessages[msgIdx]!;
       const role: "user" | "assistant" = msg.role === "assistant" ? "assistant" : "user";
-      let content = msg.content.slice(0, 2000);
+      let content = stripHtmlTags(msg.content).slice(0, 2000);
 
       // Append committed tracker data only to the last 3 assistant messages
       if (msg.gameState && trackerEligible.has(msgIdx)) {
@@ -621,7 +548,7 @@ function buildAgentMessages(systemPrompt: string, context: AgentContext, agentTy
 
   if (context.mainResponse) {
     finalParts.push(`<assistant_response>`);
-    finalParts.push(context.mainResponse);
+    finalParts.push(stripHtmlTags(context.mainResponse));
     finalParts.push(`</assistant_response>`);
   }
 
@@ -632,10 +559,9 @@ function buildAgentMessages(systemPrompt: string, context: AgentContext, agentTy
   }
 
   if (finalParts.length > 0) {
-    finalParts.unshift("Now analyze the above conversation and produce your output.");
-    // If the last message is already user role, merge to avoid consecutive user messages
-    const last = messages[messages.length - 1]!;
+    finalParts.push("\nNow return the requested format(s).");
     const finalContent = finalParts.join("\n");
+    const last = messages[messages.length - 1]!;
     if (last.role === "user") {
       messages[messages.length - 1] = { ...last, content: last.content + "\n\n" + finalContent };
     } else {
@@ -644,6 +570,151 @@ function buildAgentMessages(systemPrompt: string, context: AgentContext, agentTy
   }
 
   return messages;
+}
+
+/**
+ * Build the lore block for the system message from the agent context.
+ * Contains lorebook entries, characters, and persona.
+ */
+function buildLoreBlock(context: AgentContext): string {
+  const parts: string[] = [];
+  parts.push(`<lore>`);
+
+  if (context.activatedLorebookEntries && context.activatedLorebookEntries.length > 0) {
+    parts.push(`<lorebook_entries>`);
+    for (const entry of context.activatedLorebookEntries) {
+      parts.push(`[${entry.tag}] ${entry.name}: ${entry.content}`);
+    }
+    parts.push(`</lorebook_entries>`);
+  }
+
+  if (context.characters.length > 0) {
+    parts.push(`<characters>`);
+    for (const char of context.characters) {
+      parts.push(`- ${char.name}: ${char.description.slice(0, 2000)}`);
+    }
+    parts.push(`</characters>`);
+  }
+
+  if (context.persona) {
+    parts.push(`<persona>`);
+    parts.push(`Name: ${context.persona.name}`);
+    if (context.persona.description) parts.push(`Description: ${context.persona.description.slice(0, 2000)}`);
+    if (context.persona.personality) parts.push(`Personality: ${context.persona.personality}`);
+    if (context.persona.backstory) parts.push(`Backstory: ${context.persona.backstory}`);
+    if (context.persona.appearance) parts.push(`Appearance: ${context.persona.appearance}`);
+    if (context.persona.scenario) parts.push(`Scenario: ${context.persona.scenario}`);
+    if (context.persona.personaStats?.enabled && context.persona.personaStats.bars.length > 0) {
+      parts.push(`Status bars:`);
+      for (const bar of context.persona.personaStats.bars) {
+        parts.push(`- ${bar.name}: ${bar.value}/${bar.max}`);
+      }
+    }
+    if (context.persona.rpgStats?.enabled) {
+      const rpg = context.persona.rpgStats;
+      parts.push(`RPG Stats:`);
+      parts.push(`- HP: ${rpg.hp.value}/${rpg.hp.max}`);
+      parts.push(`- MP: ${rpg.mp.value}/${rpg.mp.max}`);
+      if (rpg.attributes.length > 0) {
+        parts.push(`Attributes:`);
+        for (const attr of rpg.attributes) {
+          parts.push(`- ${attr.name}: ${attr.value}/${attr.max}`);
+        }
+      }
+    }
+    parts.push(`</persona>`);
+  }
+
+  parts.push(`</lore>`);
+  return parts.join("\n");
+}
+
+/**
+ * Build agent-specific context blocks (sprites, backgrounds, source material, etc.)
+ * that go into the system message after lore.
+ */
+function buildAgentExtras(context: AgentContext): string {
+  const parts: string[] = [];
+
+  if (context.gameState) {
+    parts.push(`<current_game_state>`);
+    parts.push(JSON.stringify(context.gameState));
+    parts.push(`</current_game_state>`);
+  }
+
+  if (context.memory._availableSprites) {
+    const sprites = context.memory._availableSprites as Array<{
+      characterId: string;
+      characterName: string;
+      expressions: string[];
+    }>;
+    parts.push(`<available_sprites>`);
+    for (const char of sprites) {
+      parts.push(`${char.characterName} (${char.characterId}): ${char.expressions.join(", ")}`);
+    }
+    parts.push(`</available_sprites>`);
+  }
+
+  if (context.memory._availableBackgrounds) {
+    const bgs = context.memory._availableBackgrounds as Array<{
+      filename: string;
+      originalName?: string | null;
+      tags: string[];
+    }>;
+    parts.push(`<available_backgrounds>`);
+    for (const bg of bgs) {
+      const label = bg.originalName ? `${bg.filename} (${bg.originalName})` : bg.filename;
+      const tagStr = bg.tags.length > 0 ? ` [tags: ${bg.tags.join(", ")}]` : "";
+      parts.push(`- ${label}${tagStr}`);
+    }
+    parts.push(`</available_backgrounds>`);
+    if (context.memory._currentBackground) {
+      parts.push(`<current_background>${context.memory._currentBackground}</current_background>`);
+    }
+  }
+
+  if (context.memory._existingLorebookEntries) {
+    const entries = context.memory._existingLorebookEntries as string[];
+    if (entries.length > 0) {
+      parts.push(`<existing_entries>`);
+      parts.push(entries.join(", "));
+      parts.push(`</existing_entries>`);
+    }
+  }
+
+  if (context.memory._sourceMaterial) {
+    parts.push(`<source_material>`);
+    parts.push(context.memory._sourceMaterial as string);
+    parts.push(`</source_material>`);
+  }
+
+  if (context.memory._chunkInfo) {
+    const info = context.memory._chunkInfo as { current: number; total: number };
+    parts.push(
+      `<chunk_info>Chunk ${info.current} of ${info.total} — extract relevant information from this chunk.</chunk_info>`,
+    );
+  }
+
+  if (context.memory._previousExtractions) {
+    const extractions = context.memory._previousExtractions as string[];
+    parts.push(`<previous_extractions>`);
+    parts.push(
+      `The following relevant excerpts were extracted from prior chunks of the same source material. Consolidate them into a single, coherent summary along with any new relevant information from the current chunk.`,
+    );
+    for (let i = 0; i < extractions.length; i++) {
+      parts.push(`\n--- Chunk ${i + 1} ---`);
+      parts.push(extractions[i]!);
+    }
+    parts.push(`</previous_extractions>`);
+  }
+
+  if (context.memory._knowledgeRetrievalMaterial) {
+    parts.push(`<knowledge_material>`);
+    parts.push(context.memory._knowledgeRetrievalMaterial as string);
+    parts.push(`</knowledge_material>`);
+  }
+
+  return parts.join("\n");
 }
 
 /** Map agent type → its primary result type. */

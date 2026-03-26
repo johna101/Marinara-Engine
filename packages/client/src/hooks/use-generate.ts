@@ -398,7 +398,7 @@ export function useGenerate() {
 
               // Apply background change — validate filename exists before applying
               if (result.success && result.resultType === "background_change" && result.data) {
-                const bg = result.data as { chosen?: string | null; reason?: string };
+                const bg = result.data as { chosen?: string | null };
                 if (bg.chosen) {
                   // Validate background exists before setting it (prevents 404s from hallucinated filenames)
                   fetch(`/api/backgrounds/file/${encodeURIComponent(bg.chosen)}`, { method: "HEAD" })
@@ -1136,10 +1136,9 @@ function formatAgentBubble(agentType: string, agentName: string, data: unknown):
     }
 
     case "background": {
-      const reason = d.reason as string;
       const chosen = d.chosen as string | null;
       if (!chosen) return null;
-      return `🖼️ ${reason || "Background changed"}`;
+      return `🖼️ ${chosen}`;
     }
 
     case "echo-chamber": {
@@ -1151,7 +1150,7 @@ function formatAgentBubble(agentType: string, agentName: string, data: unknown):
     case "spotify": {
       const action = d.action as string;
       if (action === "none") return null;
-      const reason = (d.reason as string) ?? "";
+      const mood = (d.mood as string) ?? "";
       if (action === "play") {
         // Support both array and singular formats
         const trackNames: string[] = Array.isArray(d.trackNames)
@@ -1159,17 +1158,17 @@ function formatAgentBubble(agentType: string, agentName: string, data: unknown):
           : d.trackName
             ? [d.trackName as string]
             : [];
-        if (trackNames.length === 0) return reason ? `🎵 ${reason}` : null;
+        if (trackNames.length === 0) return mood ? `🎵 ${mood}` : null;
         if (trackNames.length === 1) {
-          return `🎵 ${trackNames[0]}${reason ? ` — ${reason}` : ""}`;
+          return `🎵 ${trackNames[0]}${mood ? ` — ${mood}` : ""}`;
         }
         const list = trackNames.map((t, i) => `${i + 1}. ${t}`).join("\n");
-        return `🎵 Queued ${trackNames.length} tracks${reason ? ` — ${reason}` : ""}\n${list}`;
+        return `🎵 Queued ${trackNames.length} tracks${mood ? ` — ${mood}` : ""}\n${list}`;
       }
       if (action === "volume") {
-        return `🔊 Volume → ${d.volume}%${reason ? ` (${reason})` : ""}`;
+        return `🔊 Volume → ${d.volume}%${mood ? ` (${mood})` : ""}`;
       }
-      return reason ? `🎵 ${reason}` : null;
+      return mood ? `🎵 ${mood}` : null;
     }
 
     case "prose-guardian": {

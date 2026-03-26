@@ -38,7 +38,6 @@ export function ChatInput({ mode = "conversation", characterNames = [] }: ChatIn
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const resizeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activeChatId = useChatStore((s) => s.activeChatId);
   const streamingChatId = useChatStore((s) => s.streamingChatId);
   const isStreamingGlobal = useChatStore((s) => s.isStreaming);
@@ -84,7 +83,6 @@ export function ChatInput({ mode = "conversation", characterNames = [] }: ChatIn
     return () => {
       // Cancel pending debounce timers
       if (draftTimerRef.current) clearTimeout(draftTimerRef.current);
-      if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
       // Flush draft synchronously
       const chatId = useChatStore.getState().activeChatId;
       if (chatId && textarea) {
@@ -302,13 +300,10 @@ export function ChatInput({ mode = "conversation", characterNames = [] }: ChatIn
       }, 300);
     }
 
-    // Auto-resize textarea (debounced to reduce layout reflows during fast typing)
-    if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current);
-    resizeTimerRef.current = setTimeout(() => {
-      if (!el) return;
-      el.style.height = "auto";
-      el.style.height = Math.min(el.scrollHeight, 200) + "px";
-    }, 150);
+    // Auto-resize textarea immediately (no debounce — avoids visible flash
+    // when pressing Enter, where height="auto" would briefly collapse the textarea)
+    el.style.height = "auto";
+    el.style.height = Math.min(el.scrollHeight, 200) + "px";
 
     // Slash command autocomplete
     const trimmed = fixed.trim();

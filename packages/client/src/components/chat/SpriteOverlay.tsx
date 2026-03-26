@@ -102,37 +102,45 @@ export function SpriteOverlay({
     }
   }, [expressionResult, onExpressionChange]);
 
-  // Fallback: keyword-based detection when no agent result
+  // Fallback: keyword-based detection when no agent result.
+  // Saved (agent-determined) expressions take priority — keyword detection
+  // only fills in characters that don't have a saved expression yet.
+  // We never persist keyword-guessed expressions to metadata; only the
+  // agent result path calls onExpressionChange.
   useEffect(() => {
     if (!messages?.length) return;
     if (expressionResult?.success && (expressionResult.data as any)?.expressions?.length) return;
 
     const newStates: Record<string, CharacterExpressionState> = {};
 
-    const recentAssistant = messages.filter((m) => m.role === "assistant").slice(-5);
-    for (const msg of recentAssistant) {
-      if (msg.characterId) {
-        const expr = detectExpression(msg.content);
-        newStates[msg.characterId] = { expression: expr, transition: "crossfade" };
-        onExpressionChange?.(msg.characterId, expr);
+    // 1. Restore saved expressions first (these came from the expression agent)
+    for (const id of characterIds) {
+      const saved = spriteExpressions?.[id];
+      if (saved) {
+        newStates[id] = { expression: saved, transition: "none" };
       }
     }
 
+    // 2. Keyword-detect only for characters without a saved expression
+    const recentAssistant = messages.filter((m) => m.role === "assistant").slice(-5);
+    for (const msg of recentAssistant) {
+      if (msg.characterId && !newStates[msg.characterId]) {
+        const expr = detectExpression(msg.content);
+        newStates[msg.characterId] = { expression: expr, transition: "crossfade" };
+      }
+    }
+
+    // 3. Fill remaining characters from their last message
     for (const id of characterIds) {
       if (!newStates[id]) {
-        const saved = spriteExpressions?.[id];
-        if (saved) {
-          newStates[id] = { expression: saved, transition: "none" };
-        } else {
-          const lastMsg = [...messages].reverse().find((m) => m.characterId === id && m.role === "assistant");
-          const expr = lastMsg ? detectExpression(lastMsg.content) : "neutral";
-          newStates[id] = { expression: expr, transition: "crossfade" };
-        }
+        const lastMsg = [...messages].reverse().find((m) => m.characterId === id && m.role === "assistant");
+        const expr = lastMsg ? detectExpression(lastMsg.content) : "neutral";
+        newStates[id] = { expression: expr, transition: "crossfade" };
       }
     }
 
     setStates(newStates);
-  }, [messages, characterIds, expressionResult, spriteExpressions, onExpressionChange]);
+  }, [messages, characterIds, expressionResult, spriteExpressions]);
 
   if (characterIds.length === 0) return null;
 

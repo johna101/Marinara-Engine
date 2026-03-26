@@ -764,7 +764,7 @@ export function ChatArea() {
 
             {/* Special thanks */}
             <p className="mt-1 max-w-xs text-center text-[0.625rem] leading-relaxed text-[var(--muted-foreground)]/40">
-              Special thanks to Kale, Tabris, GREGOR OVECH, Coins, Tacoman, Jorge, Promansis, Kitsumiro, Sheep, Pod042,
+              Special thanks to JorgeLTE, Seele The Seal King, Loungemeister, Kale, Tabris, GREGOR OVECH, Coins, Tacoman, Jorge, Promansis, Kitsumiro, Sheep, Pod042,
               Prolix, PlutoMayhem, Mezzeh, Kuc0, Exalted, Yang Best Girl, MidnightSleeper, Geechan, TheLonelyDevil,
               Artus, and you!
             </p>
@@ -1502,7 +1502,7 @@ function WorldInfoButton({ chatId }: { chatId: string | null }) {
       {open &&
         (isMobile ? (
           createPortal(
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4">
+            <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 max-md:pt-[max(1rem,env(safe-area-inset-top))]">
               <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
               <div className="relative w-full max-w-sm max-h-[calc(100dvh-4rem)] overflow-y-auto rounded-xl border border-white/10 bg-black/90 p-3 shadow-2xl backdrop-blur-xl animate-message-in">
                 {panelContent}

@@ -95,7 +95,17 @@ export interface AgentContext {
   persona: {
     name: string;
     description: string;
+    personality?: string;
+    backstory?: string;
+    appearance?: string;
+    scenario?: string;
     personaStats?: { enabled: boolean; bars: Array<{ name: string; value: number; max: number; color: string }> };
+    rpgStats?: {
+      enabled: boolean;
+      attributes: Array<{ name: string; value: number; max: number }>;
+      hp: { value: number; max: number };
+      mp: { value: number; max: number };
+    };
   } | null;
   /** The agent's own persistent memory (key-value) */
   memory: Record<string, unknown>;

@@ -2052,7 +2052,7 @@ export function ChatSettingsDrawer({ chat, open, onClose }: ChatSettingsDrawerPr
       {/* First message confirmation dialog */}
       {firstMesConfirm && (
         <div
-          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60"
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 max-md:pt-[env(safe-area-inset-top)]"
           onClick={() => setFirstMesConfirm(null)}
         >
           <div

@@ -91,6 +91,8 @@ export interface AssemblerInput {
     backstory?: string;
     appearance?: string;
   };
+  /** Raw personaStats data (for rpgStats injection) */
+  personaStats?: any;
   /** Chat messages from the DB (user + assistant + narrator etc.) */
   chatMessages: ChatMLMessage[];
   /** Current chat summary text (if any) */
@@ -193,6 +195,7 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
     personaName: input.personaName,
     personaDescription: input.personaDescription,
     personaFields: input.personaFields,
+    personaStats: input.personaStats,
     chatMessages: input.chatMessages,
     chatSummary: input.chatSummary ?? null,
     wrapFormat,
@@ -289,18 +292,31 @@ export async function assemblePrompt(input: AssemblerInput): Promise<AssemblerOu
   }
 
   // ── Phase 5: Inject depth-based sections ──
+  // Includes both preset sections with depth injection AND lorebook depth entries
+  const allDepthEntries: Array<{ content: string; role: string; depth: number }>[] = [];
+
   if (depthSections.length > 0) {
-    const depthEntries = depthSections.flatMap((s) =>
-      s.messages
-        .filter((m) => m.content?.trim()) // skip empty messages
-        .map((m) => ({
-          content: m.content,
-          role: m.role as "system" | "user" | "assistant",
-          depth: s.depth,
-        })),
+    allDepthEntries.push(
+      depthSections.flatMap((s) =>
+        s.messages
+          .filter((m) => m.content?.trim())
+          .map((m) => ({
+            content: m.content,
+            role: m.role as "system" | "user" | "assistant",
+            depth: s.depth,
+          })),
+      ),
     );
-    finalMessages = injectAtDepth(finalMessages, depthEntries);
-    lorebookDepthEntriesCount = depthEntries.length;
+  }
+
+  if (markerCtx.lorebookDepthEntries && markerCtx.lorebookDepthEntries.length > 0) {
+    allDepthEntries.push(markerCtx.lorebookDepthEntries);
+  }
+
+  const combinedDepthEntries = allDepthEntries.flat();
+  if (combinedDepthEntries.length > 0) {
+    finalMessages = injectAtDepth(finalMessages, combinedDepthEntries as Array<{ content: string; role: "system" | "user" | "assistant"; depth: number }>);
+    lorebookDepthEntriesCount = combinedDepthEntries.length;
   }
 
   // ── Phase 6: Strict role formatting ──

@@ -76,7 +76,7 @@ export function Modal({ open, onClose, title, children, width = "max-w-md" }: Mo
       aria-modal="true"
       aria-label={title}
       data-component="Modal"
-      className="mari-modal fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="mari-modal fixed inset-0 z-50 flex items-center justify-center p-4 max-md:pt-[max(1rem,env(safe-area-inset-top))]"
       style={{
         opacity: isEntering ? 1 : 0,
         transition: "opacity 150ms ease-out",

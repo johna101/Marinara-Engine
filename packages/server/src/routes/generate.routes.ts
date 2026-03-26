@@ -29,6 +29,7 @@ import { createCustomToolsStorage } from "../services/storage/custom-tools.stora
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { createRegexScriptsStorage } from "../services/storage/regex-scripts.storage.js";
 import { processLorebooks } from "../services/lorebook/index.js";
+import { injectAtDepth } from "../services/lorebook/prompt-injector.js";
 import { createLLMProvider } from "../services/llm/provider-registry.js";
 import { assemblePrompt, type AssemblerInput } from "../services/prompt/index.js";
 import { mergeAdjacentMessages } from "../services/prompt/merger.js";
@@ -37,7 +38,7 @@ import type { LLMToolDefinition, ChatMessage, LLMUsage } from "../services/llm/b
 import { executeToolCalls } from "../services/tools/tool-executor.js";
 import { createAgentPipeline, type ResolvedAgent } from "../services/agents/agent-pipeline.js";
 import { DATA_DIR } from "../utils/data-dir.js";
-import { executeAgent } from "../services/agents/agent-executor.js";
+import { executeAgent, executeAgentBatch } from "../services/agents/agent-executor.js";
 import {
   parseCharacterCommands,
   parseDuration,
@@ -505,6 +506,9 @@ export async function generateRoutes(app: FastifyInstance) {
             personaName,
             personaDescription,
             personaFields,
+            personaStats: persona?.personaStats
+              ? typeof persona.personaStats === "string" ? JSON.parse(persona.personaStats) : persona.personaStats
+              : undefined,
             chatMessages: mappedMessages,
             chatSummary: (chatMeta.summary as string) ?? null,
             enableAgents: chatEnableAgents,
@@ -1175,6 +1179,10 @@ export async function generateRoutes(app: FastifyInstance) {
             const insertAt = firstUserIdx >= 0 ? firstUserIdx : finalMessages.length;
             finalMessages.splice(insertAt, 0, { role: "system" as const, content: loreBlock });
           }
+          // Inject depth-based lorebook entries into the message array
+          if (lorebookResult.depthEntries.length > 0) {
+            finalMessages = injectAtDepth(finalMessages, lorebookResult.depthEntries);
+          }
         }
       }
 
@@ -1431,6 +1439,18 @@ export async function generateRoutes(app: FastifyInstance) {
             },
             wrapFormat,
           );
+          // Include enabled RPG attributes alongside persona fields
+          if (persona?.personaStats) {
+            const pStats = typeof persona.personaStats === "string" ? JSON.parse(persona.personaStats) : persona.personaStats;
+            if (pStats?.rpgStats?.enabled) {
+              const rpg = pStats.rpgStats as { attributes: Array<{ name: string; value: number; max: number }>; hp: { value: number; max: number }; mp: { value: number; max: number } };
+              const rpgLines = [`HP: ${rpg.hp.value}/${rpg.hp.max}`, `MP: ${rpg.mp.value}/${rpg.mp.max}`];
+              for (const attr of rpg.attributes) {
+                rpgLines.push(`${attr.name}: ${attr.value}/${attr.max}`);
+              }
+              fieldParts.push(wrapContent(rpgLines.join("\n"), "rpg_attributes", wrapFormat, 2));
+            }
+          }
           if (fieldParts.length > 0) {
             const block = wrapContent(fieldParts.join("\n"), personaName, wrapFormat, 1);
             const firstUserIdx = finalMessages.findIndex((m) => m.role === "user" || m.role === "assistant");
@@ -1705,6 +1725,10 @@ export async function generateRoutes(app: FastifyInstance) {
             ? {
                 name: personaName,
                 description: personaDescription,
+                personality: personaFields.personality || undefined,
+                backstory: personaFields.backstory || undefined,
+                appearance: personaFields.appearance || undefined,
+                scenario: personaFields.scenario || undefined,
                 ...(persona?.personaStats
                   ? (() => {
                       const pStats =
@@ -1725,7 +1749,21 @@ export async function generateRoutes(app: FastifyInstance) {
                           value: currentByName.has(bar.name) ? currentByName.get(bar.name) : bar.value,
                         }));
                       }
+                      // Only include enabled bars
+                      if (pStats && !pStats.enabled) delete pStats.bars;
                       return { personaStats: pStats };
+                    })()
+                  : {}),
+                ...(persona?.personaStats
+                  ? (() => {
+                      const pStats =
+                        typeof persona.personaStats === "string"
+                          ? JSON.parse(persona.personaStats)
+                          : persona.personaStats;
+                      if (pStats?.rpgStats?.enabled) {
+                        return { rpgStats: pStats.rpgStats };
+                      }
+                      return {};
                     })()
                   : {}),
               }
@@ -1890,11 +1928,7 @@ export async function generateRoutes(app: FastifyInstance) {
         }
       }
 
-      // If the chat-summary agent is enabled, provide the previous summary
-      const chatSummaryEnabled = enabledConfigs.some((c: any) => c.type === "chat-summary");
-      if (chatSummaryEnabled && chatMeta.summary) {
-        agentContext.memory._previousSummary = chatMeta.summary;
-      }
+      // Chat summary is manual-only — never injected into agent prompts
 
       // SSE helper for sending agent events
       // Wrapped in try-catch: if the SSE stream is closed (e.g. client
@@ -2155,6 +2189,7 @@ export async function generateRoutes(app: FastifyInstance) {
       }
 
       // Notify UI if the chat-summary agent is enabled and was injected into the prompt
+      const chatSummaryEnabled = enabledConfigs.some((c: any) => c.type === "chat-summary");
       if (chatSummaryEnabled && chatMeta.summary) {
         const chatSummaryCfg = enabledConfigs.find((c: any) => c.type === "chat-summary");
         reply.raw.write(
@@ -3031,7 +3066,6 @@ export async function generateRoutes(app: FastifyInstance) {
                 const valid = availableBgs.some((b) => b.filename === bgData.chosen);
                 if (!valid) {
                   console.warn(`[generate] Background agent chose "${bgData.chosen}" which doesn't exist — rejecting`);
-                  (result.data as any).reason = `Rejected: "${bgData.chosen}" not in available backgrounds`;
                   bgData.chosen = null;
                 }
               }
@@ -4165,9 +4199,64 @@ export async function generateRoutes(app: FastifyInstance) {
         }
       }
 
+      // Resolve persona — same logic as main pipeline
+      let personaName = "User";
+      let personaDescription = "";
+      let retryPersonaFields: { personality?: string; scenario?: string; backstory?: string; appearance?: string } = {};
+      let retryPersonaStats: any = null;
+      let retryRpgStats: any = null;
+      {
+        const allPersonas = await chars.listPersonas();
+        const persona =
+          (chat.personaId ? allPersonas.find((p: any) => p.id === chat.personaId) : null) ??
+          allPersonas.find((p: any) => p.isActive === "true");
+        if (persona) {
+          personaName = persona.name;
+          personaDescription = persona.description;
+          retryPersonaFields = {
+            personality: persona.personality ?? "",
+            scenario: persona.scenario ?? "",
+            backstory: persona.backstory ?? "",
+            appearance: persona.appearance ?? "",
+          };
+          if (persona.altDescriptions) {
+            try {
+              const altDescs = JSON.parse(persona.altDescriptions as string) as Array<{
+                active: boolean;
+                content: string;
+              }>;
+              for (const ext of altDescs) {
+                if (ext.active && ext.content) {
+                  personaDescription += "\n" + ext.content;
+                }
+              }
+            } catch {
+              /* ignore malformed JSON */
+            }
+          }
+          if (persona.personaStats) {
+            const pStats = typeof persona.personaStats === "string" ? JSON.parse(persona.personaStats) : persona.personaStats;
+            if (pStats?.enabled) retryPersonaStats = pStats;
+            if (pStats?.rpgStats?.enabled) retryRpgStats = pStats.rpgStats;
+          }
+        }
+      }
+
       // Build agent context
+      // Compute context size the same way the main pipeline does
+      const agentContextSize =
+        enabledConfigs.length > 0
+          ? Math.max(
+              ...enabledConfigs.map((c: any) => {
+                const s = typeof c.settings === "string" ? JSON.parse(c.settings) : (c.settings ?? {});
+                return (s.contextSize as number) || 5;
+              }),
+            )
+          : 5;
+      const agentSlice = recentMessages.slice(-agentContextSize);
+
       // Batch-fetch committed game state snapshots for assistant messages
-      const retryAssistantMsgIds = recentMessages
+      const retryAssistantMsgIds = agentSlice
         .filter((m: any) => m.role === "assistant")
         .map((m: any) => m.id as string);
       const retryCommittedSnapshots = await gameStateStore.getCommittedForMessages(retryAssistantMsgIds);
@@ -4175,7 +4264,7 @@ export async function generateRoutes(app: FastifyInstance) {
       const agentContext: AgentContext = {
         chatId,
         chatMode: (chat as any).mode ?? "conversation",
-        recentMessages: recentMessages.map((m: any) => {
+        recentMessages: agentSlice.map((m: any) => {
           const msg: AgentContext["recentMessages"][number] = {
             role: m.role,
             content: m.content,
@@ -4192,7 +4281,16 @@ export async function generateRoutes(app: FastifyInstance) {
         mainResponse,
         gameState: null,
         characters: charInfo,
-        persona: { name: "User", description: "" },
+        persona: personaName !== "User" ? {
+          name: personaName,
+          description: personaDescription,
+          personality: retryPersonaFields.personality || undefined,
+          backstory: retryPersonaFields.backstory || undefined,
+          appearance: retryPersonaFields.appearance || undefined,
+          scenario: retryPersonaFields.scenario || undefined,
+          ...(retryPersonaStats ? { personaStats: retryPersonaStats } : {}),
+          ...(retryRpgStats ? { rpgStats: retryRpgStats } : {}),
+        } : null,
         activatedLorebookEntries: null,
         writableLorebookIds: null,
         memory: {},
@@ -4272,63 +4370,65 @@ export async function generateRoutes(app: FastifyInstance) {
         });
       }
 
-      // Fire all agents in parallel
-      const settled = await Promise.allSettled(
-        resolvedAgents.map(async ({ cfg, resolved, agentProvider, agentModel }) => {
-          const result = await executeAgent(resolved, agentContext, agentProvider, agentModel);
-          return { cfg, result };
+      // Group agents by provider+model and batch them (same as main pipeline)
+      const providerModelGroups = new Map<string, {
+        agents: typeof resolvedAgents;
+        provider: any;
+        model: string;
+      }>();
+      for (const entry of resolvedAgents) {
+        const key = `${entry.agentProvider.constructor.name}::${entry.agentModel}`;
+        if (!providerModelGroups.has(key)) {
+          providerModelGroups.set(key, { agents: [], provider: entry.agentProvider, model: entry.agentModel });
+        }
+        providerModelGroups.get(key)!.agents.push(entry);
+      }
+
+      // Run each group as a batch (groups with different providers run in parallel)
+      const groupSettled = await Promise.allSettled(
+        [...providerModelGroups.values()].map(async (group) => {
+          const configs = group.agents.map((a) => a.resolved);
+          return executeAgentBatch(configs, agentContext, group.provider, group.model);
         }),
       );
 
-      // Stream results back to client
+      // Collect results and stream back to client
       const results: AgentResult[] = [];
-      for (const outcome of settled) {
+      for (const outcome of groupSettled) {
         if (outcome.status === "fulfilled") {
-          const { cfg, result } = outcome.value;
-          const ev = {
-            type: "agent_result",
-            data: {
-              agentType: result.agentType,
-              agentName: cfg.name,
-              resultType: result.type,
-              data: result.data,
-              success: result.success,
-              error: result.error,
-              durationMs: result.durationMs,
-            },
-          };
-          reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
-          results.push(result);
-
-          // Persist run
-          try {
-            const messageId = lastAssistant?.id ?? "";
-            await agentsStore.saveRun({
-              agentConfigId: result.agentId,
-              chatId,
-              messageId,
-              result,
-            });
-          } catch {
-            /* Non-critical */
+          for (const result of outcome.value) {
+            const cfg = resolvedAgents.find((a) => a.resolved.type === result.agentType)?.cfg;
+            const ev = {
+              type: "agent_result",
+              data: {
+                agentType: result.agentType,
+                agentName: cfg?.name ?? result.agentType,
+                resultType: result.type,
+                data: result.data,
+                success: result.success,
+                error: result.error,
+                durationMs: result.durationMs,
+              },
+            };
+            reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
+            results.push(result);
           }
         } else {
-          const agentErr = (outcome as PromiseRejectedResult).reason;
-          const matchedCfg = resolvedAgents[settled.indexOf(outcome)]?.cfg;
-          const errMsg = agentErr instanceof Error ? agentErr.message : "Agent execution failed";
-          const ev = {
-            type: "agent_result",
-            data: {
-              agentType: matchedCfg?.type ?? "unknown",
-              agentName: matchedCfg?.name ?? "Unknown",
-              resultType: "error",
-              data: null,
-              success: false,
-              error: errMsg,
-              durationMs: 0,
-            },
-          };
-          reply.raw.write(`data: ${JSON.stringify(ev)}\n\n`);
+          console.error(`[retry-agents] Group failed:`, outcome.reason);
+        }
+      }
+      // Persist agent runs
+      const messageId = lastAssistant?.id ?? "";
+      for (const result of results) {
+        try {
+          await agentsStore.saveRun({
+            agentConfigId: result.agentId,
+            chatId,
+            messageId,
+            result,
+          });
+        } catch {
+          /* Non-critical */
         }
       }
 

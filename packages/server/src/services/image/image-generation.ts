@@ -326,6 +326,7 @@ function extractFirstFileFromZip(zip: Uint8Array): Uint8Array | null {
 
   // Skip past local file header to reach data
   const lh = localHeaderOffset;
+  if (lh + 29 >= zip.length) return null;
   const lhFnLen = zip[lh + 26]! | (zip[lh + 27]! << 8);
   const lhExtraLen = zip[lh + 28]! | (zip[lh + 29]! << 8);
   const dataStart = lh + 30 + lhFnLen + lhExtraLen;

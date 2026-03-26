@@ -1671,7 +1671,7 @@ export async function generateRoutes(app: FastifyInstance) {
       // Build base agent context (without mainResponse — that comes after generation)
       // Use the maximum contextSize requested by any enabled agent (default 8)
       const agentContextSize =
-        resolvedAgents.length > 0 ? Math.max(...resolvedAgents.map((a) => (a.settings.contextSize as number) || 8)) : 8;
+        resolvedAgents.length > 0 ? Math.max(...resolvedAgents.map((a) => (a.settings.contextSize as number) || 5)) : 5;
       const agentSlice = chatMessages.slice(-agentContextSize);
 
       // Batch-fetch committed game state snapshots for assistant messages in the agent context

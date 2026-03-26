@@ -65,6 +65,12 @@ export async function executeAgent(
     }
 
     // Call LLM (streaming to avoid proxy timeouts, no tools)
+    console.log(`\n[agent] ═══ ${config.type} (${config.name}) — ${model} ═══`);
+    for (const msg of messages) {
+      console.log(`[agent] [${msg.role}] ${msg.content}`);
+    }
+    console.log(`[agent] ═══ END PROMPT — temperature=${temperature} maxTokens=${maxTokens} ═══\n`);
+
     let responseText = "";
     const result = await provider.chatComplete(messages, {
       model,
@@ -79,6 +85,10 @@ export async function executeAgent(
     if (!responseText && result.content) responseText = result.content;
     responseText = responseText.trim();
     const durationMs = Date.now() - startTime;
+
+    console.log(`[agent] ═══ ${config.type} RESPONSE (${responseText.length} chars, ${durationMs}ms) ═══`);
+    console.log(`[agent] ${responseText}`);
+    console.log(`[agent] ═══ END RESPONSE ═══\n`);
 
     // Parse the result based on agent type
     const parsed = parseAgentResponse(config.type, responseText);
@@ -221,6 +231,12 @@ export async function executeAgentBatch(
       `[agent-batch] maxTokens: ${batchMaxTokens} (${maxTokensPerAgent} × ${configs.length} agents, floor 16384)`,
     );
 
+    console.log(`\n[agent-batch] ═══ BATCH PROMPT — [${configs.map((c) => c.type).join(", ")}] — ${model} ═══`);
+    for (const msg of messages) {
+      console.log(`[agent-batch] [${msg.role}] ${msg.content}`);
+    }
+    console.log(`[agent-batch] ═══ END BATCH PROMPT — temperature=${temperature} maxTokens=${batchMaxTokens} ═══\n`);
+
     // Use streaming (onToken) to keep the connection alive — avoids proxy
     // timeouts (e.g. Cloudflare 524) on large batch responses.
     let responseText = "";
@@ -242,7 +258,9 @@ export async function executeAgentBatch(
     const totalTokens = result.usage?.totalTokens ?? 0;
 
     console.log(`[agent-batch] Got response (${responseText.length} chars, ${durationMs}ms, ${totalTokens} tokens)`);
-    console.log(`[agent-batch] Response preview: ${responseText.slice(0, 500)}`);
+    console.log(`[agent-batch] ═══ BATCH RESPONSE ═══`);
+    console.log(`[agent-batch] ${responseText}`);
+    console.log(`[agent-batch] ═══ END BATCH RESPONSE ═══\n`);
 
     // Parse the batched response into individual results
     const { parsed, failed } = parseBatchResponse(configs, responseText, durationMs, totalTokens);
@@ -472,13 +490,13 @@ function buildAgentMessages(systemPrompt: string, context: AgentContext, agentTy
 
   if (context.gameState) {
     ctxParts.push(`\n<current_game_state>`);
-    ctxParts.push(JSON.stringify(context.gameState, null, 2));
+    ctxParts.push(JSON.stringify(context.gameState));
     ctxParts.push(`</current_game_state>`);
   }
 
   if (Object.keys(context.memory).length > 0) {
     ctxParts.push(`\n<agent_memory>`);
-    ctxParts.push(JSON.stringify(context.memory, null, 2));
+    ctxParts.push(JSON.stringify(context.memory));
     ctxParts.push(`</agent_memory>`);
   }
 
@@ -584,7 +602,7 @@ function buildAgentMessages(systemPrompt: string, context: AgentContext, agentTy
         if (gs.playerStats) trackerSummary.playerStats = gs.playerStats;
         if (gs.personaStats?.length) trackerSummary.personaStats = gs.personaStats;
         if (Object.keys(trackerSummary).length > 0) {
-          content += `\n\n<committed_tracker_state>\n${JSON.stringify(trackerSummary, null, 2)}\n</committed_tracker_state>`;
+          content += `\n\n<committed_tracker_state>\n${JSON.stringify(trackerSummary)}\n</committed_tracker_state>`;
         }
       }
 
@@ -609,7 +627,7 @@ function buildAgentMessages(systemPrompt: string, context: AgentContext, agentTy
 
   if (context.memory._agentResults) {
     finalParts.push(`\n<agent_results>`);
-    finalParts.push(JSON.stringify(context.memory._agentResults, null, 2));
+    finalParts.push(JSON.stringify(context.memory._agentResults));
     finalParts.push(`</agent_results>`);
   }
 

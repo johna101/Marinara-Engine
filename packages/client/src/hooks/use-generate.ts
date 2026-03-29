@@ -41,7 +41,6 @@ export function useGenerate() {
   const addThoughtBubble = useAgentStore((s) => s.addThoughtBubble);
   const clearThoughtBubbles = useAgentStore((s) => s.clearThoughtBubbles);
   const addEchoMessage = useAgentStore((s) => s.addEchoMessage);
-  const clearEchoMessages = useAgentStore((s) => s.clearEchoMessages);
   const setCyoaChoices = useAgentStore((s) => s.setCyoaChoices);
   const clearCyoaChoices = useAgentStore((s) => s.clearCyoaChoices);
   const setFailedAgentTypes = useAgentStore((s) => s.setFailedAgentTypes);
@@ -92,7 +91,6 @@ export function useGenerate() {
         setStreaming(true, params.chatId);
         clearStreamBuffer();
         clearThoughtBubbles();
-        clearEchoMessages();
         clearCyoaChoices();
         clearFailedAgentTypes();
         clearDebugLog();
@@ -897,7 +895,6 @@ export function useGenerate() {
       addThoughtBubble,
       clearThoughtBubbles,
       addEchoMessage,
-      clearEchoMessages,
       setCyoaChoices,
       clearCyoaChoices,
       clearFailedAgentTypes,
@@ -916,7 +913,6 @@ export function useGenerate() {
       setProcessing(true);
       clearFailedAgentTypes();
       clearThoughtBubbles();
-      clearEchoMessages();
       clearDebugLog();
 
       try {
@@ -1097,7 +1093,6 @@ export function useGenerate() {
       addEchoMessage,
       clearFailedAgentTypes,
       clearDebugLog,
-      clearEchoMessages,
       clearThoughtBubbles,
       setFailedAgentTypes,
       setProcessing,

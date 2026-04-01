@@ -66,7 +66,6 @@
 - **Chat Folders** — Organize chats into named, color-coded folders with drag-and-drop reorder. Move chats between folders, collapse/expand, and filter by mode (conversation/roleplay/visual novel). Fully persisted server-side.
 - **Slash Commands** — SillyTavern-style command system with autocomplete: `/roll` (dice notation), `/sys`, `/narrator`, `/continue`, `/as <character>`, `/impersonate`, `/remind <time> <message>`, `/random`, `/scene` (AI-planned scene branching), and `/help`.
 - **AI Lorebook Maker** — Generate structured lorebook entries from a topic prompt using your LLM connection. Streams results via SSE with batch support for large requests and auto-attaches entries to existing lorebooks.
-- **Discord Webhook Integration** — Per-chat webhook URL setting that mirrors both user and AI messages to a Discord channel, with URL validation and proper author names.
 - **Connection Duplicate & Test** — Clone existing connections (including encrypted API keys) and test connectivity with provider-specific pings (ComfyUI, AUTOMATIC1111, NovelAI, and standard OpenAI-compatible endpoints).
 - **ComfyUI Custom Workflows** — Paste custom ComfyUI workflow JSON with `%prompt%`, `%negative_prompt%`, `%width%`, `%height%`, `%seed%`, and `%model%` placeholders. A default txt2img workflow is provided as fallback.
 - **OpenRouter Provider Preference** — Select a preferred upstream provider (e.g. Anthropic, Google) when routing through OpenRouter.
@@ -93,6 +92,7 @@
 - **Fixed new folders appearing at the bottom** — Two-part fix: server assigns `sortOrder: 0` to new folders (shifting existing ones down), and the client renders folders before unfiled chats.
 - **Fixed missing DB column migrations** — Added `openrouter_provider`, `comfyui_workflow`, and `embedding_base_url` to `COLUMN_MIGRATIONS` so they auto-create on startup.
 - **Fixed combat encounter `parseJSON`** — Corrected escape-sequence detection and added 3-level sanitization for AI responses in the combat agent.
+- **And more…**
 
 ---
 

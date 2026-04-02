@@ -1,28 +1,24 @@
 // ──────────────────────────────────────────────
 // Chat: Conversation View — Discord-style composite
 // ──────────────────────────────────────────────
-import { useRef, useEffect, useLayoutEffect, useCallback, useMemo, useState } from "react";
+import { Suspense, lazy, useRef, useEffect, useLayoutEffect, useCallback, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, ChevronUp, Settings2, FolderOpen, Image as ImageIcon, ArrowRightLeft, X } from "lucide-react";
+import { Loader2, ChevronUp, Settings2, FolderOpen, Image as ImageIcon, ArrowRightLeft } from "lucide-react";
 import { ConversationMessage } from "./ConversationMessage";
 import { ConversationInput } from "./ConversationInput";
 import { SceneBanner, EndSceneBar } from "./SceneBanner";
 import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
 import { playNotificationPing } from "../../lib/notification-sound";
-import { useAutonomousMessaging } from "../../hooks/use-autonomous-messaging";
-import { useChat, chatKeys } from "../../hooks/use-chats";
 import { characterKeys } from "../../hooks/use-characters";
 import { api } from "../../lib/api-client";
-import { generateClientId } from "../../lib/utils";
-import type { CharacterMap } from "./ChatArea";
+import type { CharacterMap, PersonaInfo } from "./chat-area.types";
 import type { Message } from "@marinara-engine/shared";
 
-interface PersonaInfo {
-  name: string;
-  avatarUrl?: string;
-  nameColor?: string;
-}
+const ConversationAutonomousEffects = lazy(async () => {
+  const module = await import("./ConversationAutonomousEffects");
+  return { default: module.ConversationAutonomousEffects };
+});
 
 interface ConversationViewProps {
   chatId: string;
@@ -35,6 +31,7 @@ interface ConversationViewProps {
   characterMap: CharacterMap;
   characterNames: string[];
   personaInfo?: PersonaInfo;
+  chatMeta: Record<string, any>;
   chatCharIds: string[];
   onDelete: (messageId: string) => void;
   onRegenerate: (messageId: string) => void;
@@ -111,6 +108,7 @@ export function ConversationView({
   characterMap,
   characterNames,
   personaInfo,
+  chatMeta,
   chatCharIds,
   onDelete,
   onRegenerate,
@@ -138,63 +136,6 @@ export function ConversationView({
   const typingCharacterName = useChatStore((s) => s.typingCharacterName);
   const delayedCharacterInfo = useChatStore((s) => s.delayedCharacterInfo);
 
-  // ── Autonomous messaging ──
-  const { data: chatData } = useChat(chatId);
-  const chatMeta = useMemo(() => {
-    if (!chatData) return {} as Record<string, unknown>;
-    const raw = (chatData as unknown as { metadata?: string | Record<string, unknown> }).metadata;
-    return (typeof raw === "string" ? JSON.parse(raw) : (raw ?? {})) as Record<string, unknown>;
-  }, [chatData]);
-  const autonomousEnabled = !!chatMeta.autonomousMessages;
-
-  // Notification state for autonomous messages
-  const [notification, setNotification] = useState<{ name: string; id: string } | null>(null);
-  const notificationTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  const handleAutonomousMessage = useCallback(
-    (characterId: string) => {
-      const charInfo = characterMap.get(characterId);
-      const name = charInfo?.name ?? "Someone";
-      // Play notification sound immediately
-      if (useUIStore.getState().convoNotificationSound) {
-        playNotificationPing();
-      }
-      // Increment unread count (for sidebar badge) — only if user is viewing a different chat
-      const currentActiveId = useChatStore.getState().activeChatId;
-      if (currentActiveId !== chatId) {
-        useChatStore.getState().incrementUnread(chatId);
-      }
-      // Show toast notification
-      clearTimeout(notificationTimerRef.current);
-      setNotification({ name, id: generateClientId() });
-      notificationTimerRef.current = setTimeout(() => setNotification(null), 5000);
-    },
-    [chatId, characterMap],
-  );
-
-  const exchangesEnabled = !!chatMeta.characterExchanges;
-  const { recordUserActivity, recordAssistantActivity, ensureSchedules } = useAutonomousMessaging(
-    chatId,
-    autonomousEnabled,
-    exchangesEnabled,
-    handleAutonomousMessage,
-  );
-
-  // Generate schedules on first render for this chat (only if autonomous messaging is enabled)
-  const schedulesInitRef = useRef<string | null>(null);
-  useEffect(() => {
-    // Wait until character IDs are loaded before calling ensureSchedules
-    if (!chatId || chatCharIds.length === 0 || !autonomousEnabled) return;
-    if (schedulesInitRef.current === chatId) return;
-    schedulesInitRef.current = chatId;
-    ensureSchedules(chatCharIds).then(() => {
-      // Refresh character data so status dots pick up the current schedule status
-      qc.invalidateQueries({ queryKey: characterKeys.list() });
-      // Refresh chat data so settings drawer picks up the new schedules
-      qc.invalidateQueries({ queryKey: chatKeys.detail(chatId) });
-    });
-  }, [chatId, chatCharIds, autonomousEnabled, ensureSchedules, qc]);
-
   // ── Periodic status refresh (every 60s) ──
   // Keeps status dots in sync with the character's schedule regardless of autonomous messaging
   useEffect(() => {
@@ -213,22 +154,6 @@ export function ConversationView({
     return () => clearInterval(timer);
   }, [chatId, qc]);
 
-  // Record user activity when a new user message appears in the messages list
-  const prevMsgCountRef = useRef(messages?.length ?? 0);
-  useEffect(() => {
-    if (!messages) return;
-    const count = messages.length;
-    if (count > prevMsgCountRef.current) {
-      const newest = messages[count - 1];
-      if (newest?.role === "user") {
-        recordUserActivity();
-      } else if (newest?.role === "assistant") {
-        recordAssistantActivity(newest.characterId ?? undefined);
-      }
-    }
-    prevMsgCountRef.current = count;
-  }, [messages, recordUserActivity, recordAssistantActivity]);
-
   // Global conversation gradient from settings
   const convoGradientFrom = useUIStore((s) => s.convoGradientFrom);
   const convoGradientTo = useUIStore((s) => s.convoGradientTo);
@@ -236,6 +161,7 @@ export function ConversationView({
     () => ({ background: `linear-gradient(135deg, ${convoGradientFrom}, ${convoGradientTo})` }),
     [convoGradientFrom, convoGradientTo],
   );
+  const hasAutonomousMessaging = !!chatMeta.autonomousMessages || !!chatMeta.characterExchanges;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -832,19 +758,17 @@ export function ConversationView({
       </div>
 
       {/* ── Autonomous message toast notification ── */}
-      {notification && (
-        <div
-          key={notification.id}
-          className="pointer-events-auto absolute right-4 top-14 z-20 flex animate-slide-in-right items-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-medium text-white shadow-lg"
-        >
-          <span>{notification.name} messaged you!</span>
-          <button
-            onClick={() => setNotification(null)}
-            className="ml-1 rounded p-0.5 transition-colors hover:bg-foreground/20"
-          >
-            <X size="0.75rem" />
-          </button>
-        </div>
+      {hasAutonomousMessaging && (
+        <Suspense fallback={null}>
+          <ConversationAutonomousEffects
+            key={chatId}
+            chatId={chatId}
+            chatCharIds={chatCharIds}
+            messages={messages}
+            characterMap={characterMap}
+            chatMeta={chatMeta}
+          />
+        </Suspense>
       )}
 
       {/* ── End Scene bar (above input) ── */}

@@ -89,6 +89,7 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: "no-store",
     });
 
     if (!res.ok || !res.body) {
@@ -146,6 +147,7 @@ export const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: body !== undefined ? JSON.stringify(body) : undefined,
+      cache: "no-store",
       signal,
     });
 

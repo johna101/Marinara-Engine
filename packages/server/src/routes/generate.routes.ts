@@ -3480,6 +3480,11 @@ export async function generateRoutes(app: FastifyInstance) {
             await chats.updateSwipeExtra(savedMsg.id, refreshedMsg.activeSwipeIndex, extraUpdate);
           }
 
+          sendSseEvent(reply, {
+            type: "message_saved",
+            data: refreshedMsg ?? savedMsg,
+          });
+
           // Evict cachedPrompt from older messages to save storage (keep last 2 assistant msgs)
           const allMsgs = await chats.listMessages(input.chatId);
           const assistantMsgIds = allMsgs.filter((m) => m.role === "assistant").map((m) => m.id);

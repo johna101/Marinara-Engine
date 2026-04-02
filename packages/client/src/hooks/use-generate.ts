@@ -2,7 +2,7 @@
 // React Query: Generation (streaming + agent pipeline)
 // ──────────────────────────────────────────────
 import { useCallback } from "react";
-import { useQueryClient, type InfiniteData } from "@tanstack/react-query";
+import { useQueryClient, type InfiniteData, type QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { api } from "../lib/api-client";
 
@@ -19,6 +19,47 @@ import { chatKeys } from "./use-chats";
 import { characterKeys } from "./use-characters";
 import { playNotificationPing } from "../lib/notification-sound";
 import type { Chat, Message } from "@marinara-engine/shared";
+
+function sortMessagesByCreatedAt(messages: Message[]): Message[] {
+  return [...messages].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+}
+
+function upsertPersistedMessages(qc: QueryClient, chatId: string, incoming: Message[]) {
+  if (incoming.length === 0) return;
+
+  const sortedIncoming = sortMessagesByCreatedAt(incoming);
+
+  qc.setQueryData<InfiniteData<Message[]>>(chatKeys.messages(chatId), (old) => {
+    if (!old) {
+      return {
+        pageParams: [undefined],
+        pages: [sortedIncoming],
+      };
+    }
+
+    const persistedById = new Map(sortedIncoming.map((msg) => [msg.id, msg]));
+    const existingIds = new Set<string>();
+
+    const pages = old.pages.map((page) =>
+      page.map((msg) => {
+        existingIds.add(msg.id);
+        const persisted = persistedById.get(msg.id);
+        return persisted ? { ...msg, ...persisted } : msg;
+      }),
+    );
+
+    const missing = sortedIncoming.filter((msg) => !existingIds.has(msg.id));
+    if (missing.length > 0) {
+      if (pages.length === 0) {
+        pages.push(missing);
+      } else {
+        pages[0] = [...pages[0], ...missing];
+      }
+    }
+
+    return { ...old, pages };
+  });
+}
 
 /**
  * Hook that handles streaming generation.
@@ -135,6 +176,7 @@ export function useGenerate() {
       let typingActive = false;
       let typewriterDone: (() => void) | null = null;
       let rafId = 0;
+      const persistedMessages = new Map<string, Message>();
 
       // ── Streaming think-tag filter ──
       // Models may emit <think>...</think> or <thinking>...</thinking> at the
@@ -681,6 +723,13 @@ export function useGenerate() {
               break;
             }
 
+            case "message_saved": {
+              const savedMessage = event.data as Message;
+              persistedMessages.set(savedMessage.id, savedMessage);
+              upsertPersistedMessages(qc, params.chatId, [savedMessage]);
+              break;
+            }
+
             case "schedule_updated": {
               const schedData = event.data as { characterId: string; status?: string; activity?: string };
               const charName = schedData.activity || schedData.status || "schedule";
@@ -906,6 +955,9 @@ export function useGenerate() {
           } catch {
             /* best-effort — the user can pull-to-refresh */
           }
+        }
+        if (persistedMessages.size > 0) {
+          upsertPersistedMessages(qc, params.chatId, [...persistedMessages.values()]);
         }
         // Re-sort sidebar so this chat floats to the top
         qc.invalidateQueries({ queryKey: chatKeys.list() });

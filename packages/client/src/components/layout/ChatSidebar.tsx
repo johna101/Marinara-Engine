@@ -485,14 +485,14 @@ export function ChatSidebar() {
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={cn(
-                "flex min-h-[1.875rem] flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-1.5 text-xs leading-[1.2] font-medium transition-all",
+                "flex min-h-[2.125rem] flex-1 items-center justify-center gap-1.5 overflow-visible rounded-lg px-2 py-2 text-xs leading-normal font-medium transition-all",
                 isActive
                   ? "bg-[var(--sidebar-accent)] text-[var(--sidebar-accent-foreground)] shadow-sm"
                   : "text-[var(--muted-foreground)] hover:bg-[var(--sidebar-accent)]/50 hover:text-[var(--sidebar-foreground)]",
               )}
             >
-              {cfg.icon}
-              <span className="leading-[1.2]">{cfg.label}s</span>
+              <span className="shrink-0 leading-none">{cfg.icon}</span>
+              <span className="inline-flex min-h-[1rem] items-center whitespace-nowrap pb-px leading-normal">{cfg.label}s</span>
               {tabUnread > 0 && !isActive && (
                 <span className="ml-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[0.5625rem] font-bold leading-none text-white">
                   {tabUnread > 99 ? "99+" : tabUnread}

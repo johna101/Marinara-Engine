@@ -45,8 +45,9 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
-            # On push to main → :sha-<short>
+            # On push to main → :sha-<short> :main
             type=sha,prefix=sha-,enable={{is_default_branch}}
+            type=raw,value=main,enable={{is_default_branch}}
             # On tag push → :1.2.3, :1.2, :1, :latest
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

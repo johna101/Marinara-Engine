@@ -22,6 +22,11 @@ export interface ResolvedAgent extends AgentExecConfig {
   toolContext?: AgentToolContext;
 }
 
+export interface AgentInjection {
+  agentType: string;
+  text: string;
+}
+
 /** Callback fired whenever an agent produces a result. */
 export type AgentResultCallback = (result: AgentResult) => void;
 
@@ -189,18 +194,18 @@ export async function runPreGenerationAgents(
   context: AgentContext,
   onResult?: AgentResultCallback,
   agentTypeFilter?: (agentType: string) => boolean,
-): Promise<string[]> {
+): Promise<AgentInjection[]> {
   const filtered = agentTypeFilter ? agents.filter((a) => agentTypeFilter(a.type)) : agents;
   const results = await executePhase(filtered, "pre_generation", context, onResult);
 
-  const injections: string[] = [];
+  const injections: AgentInjection[] = [];
   for (const result of results) {
     if (!result.success) continue;
 
     // prose-guardian & director produce text to inject
     if (result.type === "context_injection" || result.type === "director_event") {
       const text = typeof result.data === "string" ? result.data : ((result.data as any)?.text ?? "");
-      if (text) injections.push(text);
+      if (text) injections.push({ agentType: result.agentType, text });
     }
     // prompt_review is informational — the onResult callback streams it
   }
@@ -268,7 +273,7 @@ export function createAgentPipeline(
      * Phase 1: Run pre-generation agents.
      * Returns context injection strings to prepend to the prompt.
      */
-    async preGenerate(agentTypeFilter?: (agentType: string) => boolean): Promise<string[]> {
+    async preGenerate(agentTypeFilter?: (agentType: string) => boolean): Promise<AgentInjection[]> {
       return runPreGenerationAgents(agents, baseContext, wrappedOnResult, agentTypeFilter);
     },
 

@@ -164,7 +164,10 @@ export class GoogleProvider extends BaseLLMProvider {
 
     const onAbort = () => reader.cancel().catch(() => {});
     if (options.signal) {
-      if (options.signal.aborted) { await reader.cancel().catch(() => {}); return; }
+      if (options.signal.aborted) {
+        await reader.cancel().catch(() => {});
+        return;
+      }
       options.signal.addEventListener("abort", onAbort, { once: true });
     }
 
@@ -178,51 +181,51 @@ export class GoogleProvider extends BaseLLMProvider {
     let lastSignature: string | undefined;
 
     try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
+        buffer += decoder.decode(value, { stream: true });
 
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed) continue;
 
-        if (!trimmed.startsWith("data: ")) continue;
-        const data = trimmed.slice(6);
+          if (!trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
 
-        try {
-          const parsed = JSON.parse(data);
-          if (parsed.usageMetadata) {
-            streamUsage = {
-              promptTokens: parsed.usageMetadata.promptTokenCount,
-              completionTokens: parsed.usageMetadata.candidatesTokenCount,
-              totalTokens: parsed.usageMetadata.totalTokenCount,
-            };
-          }
-          const parts: GeminiPart[] = parsed.candidates?.[0]?.content?.parts ?? [];
-          for (const part of parts) {
-            // Capture thought signature from any part
-            if (part.thoughtSignature) lastSignature = part.thoughtSignature;
-
-            if (part.thought && part.text) {
-              // Thought summary part
-              thoughtText += part.text;
-              if (options.onThinking) options.onThinking(part.text);
-            } else if (part.text && !part.thought) {
-              // Regular text part
-              responseText += part.text;
-              yield part.text;
+          try {
+            const parsed = JSON.parse(data);
+            if (parsed.usageMetadata) {
+              streamUsage = {
+                promptTokens: parsed.usageMetadata.promptTokenCount,
+                completionTokens: parsed.usageMetadata.candidatesTokenCount,
+                totalTokens: parsed.usageMetadata.totalTokenCount,
+              };
             }
+            const parts: GeminiPart[] = parsed.candidates?.[0]?.content?.parts ?? [];
+            for (const part of parts) {
+              // Capture thought signature from any part
+              if (part.thoughtSignature) lastSignature = part.thoughtSignature;
+
+              if (part.thought && part.text) {
+                // Thought summary part
+                thoughtText += part.text;
+                if (options.onThinking) options.onThinking(part.text);
+              } else if (part.text && !part.thought) {
+                // Regular text part
+                responseText += part.text;
+                yield part.text;
+              }
+            }
+          } catch {
+            // Skip malformed lines
           }
-        } catch {
-          // Skip malformed lines
         }
       }
-    }
     } finally {
       if (options.signal) options.signal.removeEventListener("abort", onAbort);
     }

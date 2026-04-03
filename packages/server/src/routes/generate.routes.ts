@@ -36,7 +36,7 @@ import { mergeAdjacentMessages } from "../services/prompt/merger.js";
 import { wrapContent } from "../services/prompt/format-engine.js";
 import type { LLMToolDefinition, ChatMessage, LLMUsage } from "../services/llm/base-provider.js";
 import { executeToolCalls } from "../services/tools/tool-executor.js";
-import { createAgentPipeline, type ResolvedAgent } from "../services/agents/agent-pipeline.js";
+import { createAgentPipeline, type ResolvedAgent, type AgentInjection } from "../services/agents/agent-pipeline.js";
 import { DATA_DIR } from "../utils/data-dir.js";
 import { executeAgent } from "../services/agents/agent-executor.js";
 import {
@@ -78,6 +78,33 @@ import {
 } from "./generate/generate-route-utils.js";
 import { registerRetryAgentsRoute } from "./generate/retry-agents-route.js";
 import { sendSseEvent, startSseReply, trySendSseEvent } from "./generate/sse.js";
+
+/**
+ * Format agent injection results into a wrapped block for prompt injection.
+ * Each agent gets its own XML/markdown section with its type as the tag name.
+ */
+function formatAgentInjections(injections: AgentInjection[], wrapFormat: string): string {
+  if (injections.length === 1) {
+    const { agentType, text } = injections[0]!;
+    const tag = agentType.replace(/[^a-z0-9_-]/gi, "_");
+    if (wrapFormat === "markdown") return `## ${tag}\n${text}`;
+    if (wrapFormat === "xml") return `<${tag}>\n${text}\n</${tag}>`;
+    return text;
+  }
+  // Multiple agents — wrap each individually
+  const parts: string[] = [];
+  for (const { agentType, text } of injections) {
+    const tag = agentType.replace(/[^a-z0-9_-]/gi, "_");
+    if (wrapFormat === "markdown") {
+      parts.push(`## ${tag}\n${text}`);
+    } else if (wrapFormat === "xml") {
+      parts.push(`<${tag}>\n${text}\n</${tag}>`);
+    } else {
+      parts.push(text);
+    }
+  }
+  return parts.join("\n\n");
+}
 
 export async function generateRoutes(app: FastifyInstance) {
   const chats = createChatsStorage(app.db);
@@ -172,7 +199,10 @@ export async function generateRoutes(app: FastifyInstance) {
     // ── Abort controller: cancel agents when client disconnects ──
     const abortController = new AbortController();
     // Register this generation so the /abort endpoint can cancel it
-    const activeGenerations = (app as any).activeGenerations as Map<string, { abortController: AbortController; backendUrl: string | null }>;
+    const activeGenerations = (app as any).activeGenerations as Map<
+      string,
+      { abortController: AbortController; backendUrl: string | null }
+    >;
     if (activeGenerations) {
       activeGenerations.set(input.chatId, { abortController, backendUrl: baseUrl });
     }
@@ -190,7 +220,6 @@ export async function generateRoutes(app: FastifyInstance) {
       }
     };
     req.raw.on("close", onClose);
-
 
     // ── SSE progress helper: tells the client what phase we're in ──
     const sendProgress = (phase: string) => {
@@ -2626,7 +2655,7 @@ export async function generateRoutes(app: FastifyInstance) {
       // prose-guardian) which improve writing quality and should run every time.
       // On regens, reuse cached injections from the first generation to save tokens.
       // Post-gen agents still run after every response.
-      let contextInjections: string[] = [];
+      let contextInjections: AgentInjection[] = [];
       // Static-injection agents don't need LLM calls — they inject prompt text directly
       const STATIC_INJECTION_AGENTS = new Set(["html"]);
       const SEPARATE_INJECTION_AGENTS = new Set(["knowledge-retrieval"]);
@@ -2676,7 +2705,7 @@ export async function generateRoutes(app: FastifyInstance) {
               console.log(`[timing] Pre-gen agents: ${Date.now() - _tAgents}ms`);
               return injections;
             })()
-          : Promise.resolve([] as string[]);
+          : Promise.resolve([] as AgentInjection[]);
 
         // Build the knowledge retrieval promise
         const krPromise = shouldRunKR
@@ -2714,13 +2743,7 @@ export async function generateRoutes(app: FastifyInstance) {
 
         // Inject pre-gen agent context at depth 0 (very bottom of prompt)
         if (contextInjections.length > 0) {
-          const injectionBlock = contextInjections.join("\n\n");
-          const wrapped =
-            wrapFormat === "markdown"
-              ? `## Prose Guardian\n${injectionBlock}`
-              : wrapFormat === "xml"
-                ? `<prose_guardian>\n${injectionBlock}\n</prose_guardian>`
-                : injectionBlock;
+          const wrapped = formatAgentInjections(contextInjections, wrapFormat);
           finalMessages = injectAtDepth(finalMessages, [{ content: wrapped, role: "system", depth: 0 }]);
         }
 
@@ -2741,26 +2764,33 @@ export async function generateRoutes(app: FastifyInstance) {
               const last = finalMessages[finalMessages.length - 1]!;
               finalMessages[finalMessages.length - 1] = { ...last, content: last.content + krWrapped };
             }
-            contextInjections.push(krText);
+            contextInjections.push({ agentType: "knowledge-retrieval", text: krText });
           }
         }
       } else if (hasPreGenAgents && input.regenerateMessageId) {
         // Regeneration — try to reuse cached context injections from the original generation
         const regenMsg = await chats.getMessage(input.regenerateMessageId);
         const regenExtra = parseExtra(regenMsg?.extra);
-        const cached = regenExtra.contextInjections as string[] | undefined;
+        const rawCached = regenExtra.contextInjections as AgentInjection[] | string[] | undefined;
+
+        // Backwards compat: old caches stored plain string[], upgrade to AgentInjection[]
+        const cached: AgentInjection[] | undefined = rawCached?.length
+          ? typeof rawCached[0] === "string"
+            ? (rawCached as string[]).map((text) => ({ agentType: "prose-guardian", text }))
+            : (rawCached as AgentInjection[])
+          : undefined;
 
         if (cached && cached.length > 0) {
           contextInjections = cached;
-          for (const text of cached) {
+          for (const inj of cached) {
             reply.raw.write(
               `data: ${JSON.stringify({
                 type: "agent_result",
                 data: {
-                  agentType: "prose-guardian",
-                  agentName: "Prose Guardian",
+                  agentType: inj.agentType,
+                  agentName: inj.agentType,
                   resultType: "context_injection",
-                  data: { text },
+                  data: { text: inj.text },
                   success: true,
                   error: null,
                   durationMs: 0,
@@ -2770,24 +2800,17 @@ export async function generateRoutes(app: FastifyInstance) {
             );
           }
         } else {
-          const CONTEXT_INJECTION_AGENTS = new Set(["prose-guardian", "director"]);
           const hasContextInjectionAgents = resolvedAgents.some(
-            (a) => a.phase === "pre_generation" && CONTEXT_INJECTION_AGENTS.has(a.type),
+            (a) => a.phase === "pre_generation" && !EXCLUDED_FROM_PIPELINE.has(a.type),
           );
           if (hasContextInjectionAgents) {
             reply.raw.write(`data: ${JSON.stringify({ type: "agent_start", data: { phase: "pre_generation" } })}\n\n`);
-            contextInjections = await pipeline.preGenerate((agentType) => CONTEXT_INJECTION_AGENTS.has(agentType));
+            contextInjections = await pipeline.preGenerate((agentType) => !EXCLUDED_FROM_PIPELINE.has(agentType));
           }
         }
 
         if (contextInjections.length > 0) {
-          const injectionBlock = contextInjections.join("\n\n");
-          const wrapped =
-            wrapFormat === "markdown"
-              ? `## Prose Guardian\n${injectionBlock}`
-              : wrapFormat === "xml"
-                ? `<prose_guardian>\n${injectionBlock}\n</prose_guardian>`
-                : injectionBlock;
+          const wrapped = formatAgentInjections(contextInjections, wrapFormat);
           finalMessages = injectAtDepth(finalMessages, [{ content: wrapped, role: "system", depth: 0 }]);
         }
       }
@@ -5293,7 +5316,6 @@ export async function generateRoutes(app: FastifyInstance) {
     }
   });
 
-
   // ── Active generation tracking for explicit abort ──
   const activeGenerations = new Map<string, { abortController: AbortController; backendUrl: string | null }>();
 
@@ -5331,10 +5353,6 @@ export async function generateRoutes(app: FastifyInstance) {
     activeGenerations.delete(chatId);
     return reply.send({ aborted: true });
   });
-
-
-
-
 
   await registerRetryAgentsRoute(app);
 }

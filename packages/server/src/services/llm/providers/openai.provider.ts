@@ -201,7 +201,10 @@ export class OpenAIProvider extends BaseLLMProvider {
     // to the backend), even if undici doesn't propagate the abort automatically.
     const onAbort = () => reader.cancel().catch(() => {});
     if (options.signal) {
-      if (options.signal.aborted) { await reader.cancel().catch(() => {}); return; }
+      if (options.signal.aborted) {
+        await reader.cancel().catch(() => {});
+        return;
+      }
       options.signal.addEventListener("abort", onAbort, { once: true });
     }
 
@@ -210,53 +213,53 @@ export class OpenAIProvider extends BaseLLMProvider {
     let streamUsage: LLMUsage | undefined;
 
     try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data: ")) continue;
-        const data = trimmed.slice(6);
-        if (data === "[DONE]") {
-          if (streamUsage) return streamUsage;
-          return;
-        }
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
+          if (data === "[DONE]") {
+            if (streamUsage) return streamUsage;
+            return;
+          }
 
-        try {
-          const parsed = JSON.parse(data) as {
-            choices: Array<{ delta: { content?: string | unknown[]; reasoning_content?: string } }>;
-            usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
-          };
-          // Capture usage from the final chunk (OpenAI sends it with stream_options)
-          if (parsed.usage) {
-            streamUsage = {
-              promptTokens: parsed.usage.prompt_tokens,
-              completionTokens: parsed.usage.completion_tokens,
-              totalTokens: parsed.usage.total_tokens,
+          try {
+            const parsed = JSON.parse(data) as {
+              choices: Array<{ delta: { content?: string | unknown[]; reasoning_content?: string } }>;
+              usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number };
             };
+            // Capture usage from the final chunk (OpenAI sends it with stream_options)
+            if (parsed.usage) {
+              streamUsage = {
+                promptTokens: parsed.usage.prompt_tokens,
+                completionTokens: parsed.usage.completion_tokens,
+                totalTokens: parsed.usage.total_tokens,
+              };
+            }
+            const delta = parsed.choices[0]?.delta;
+            if (delta?.reasoning_content && options.onThinking) {
+              options.onThinking(delta.reasoning_content);
+            }
+            // Handle OpenRouter content block arrays (Anthropic-style)
+            const blocks = OpenAIProvider.extractContentBlocks(delta?.content);
+            if (blocks) {
+              if (blocks.thinking && options.onThinking) options.onThinking(blocks.thinking);
+              if (blocks.text) yield blocks.text;
+            } else if (delta?.content) {
+              yield delta.content as string;
+            }
+          } catch {
+            // Skip malformed JSON lines
           }
-          const delta = parsed.choices[0]?.delta;
-          if (delta?.reasoning_content && options.onThinking) {
-            options.onThinking(delta.reasoning_content);
-          }
-          // Handle OpenRouter content block arrays (Anthropic-style)
-          const blocks = OpenAIProvider.extractContentBlocks(delta?.content);
-          if (blocks) {
-            if (blocks.thinking && options.onThinking) options.onThinking(blocks.thinking);
-            if (blocks.text) yield blocks.text;
-          } else if (delta?.content) {
-            yield delta.content as string;
-          }
-        } catch {
-          // Skip malformed JSON lines
         }
       }
-    }
     } finally {
       if (options.signal) options.signal.removeEventListener("abort", onAbort);
     }
@@ -786,7 +789,10 @@ export class OpenAIProvider extends BaseLLMProvider {
 
     const onAbortCCR = () => reader.cancel().catch(() => {});
     if (options.signal) {
-      if (options.signal.aborted) { await reader.cancel().catch(() => {}); return { content: null, toolCalls: [], finishReason: "stop", usage: undefined }; }
+      if (options.signal.aborted) {
+        await reader.cancel().catch(() => {});
+        return { content: null, toolCalls: [], finishReason: "stop", usage: undefined };
+      }
       options.signal.addEventListener("abort", onAbortCCR, { once: true });
     }
 

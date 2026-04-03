@@ -129,7 +129,10 @@ export class AnthropicProvider extends BaseLLMProvider {
 
     const onAbort = () => reader.cancel().catch(() => {});
     if (options.signal) {
-      if (options.signal.aborted) { await reader.cancel().catch(() => {}); return; }
+      if (options.signal.aborted) {
+        await reader.cancel().catch(() => {});
+        return;
+      }
       options.signal.addEventListener("abort", onAbort, { once: true });
     }
 
@@ -140,62 +143,62 @@ export class AnthropicProvider extends BaseLLMProvider {
     let outputTokens = 0;
 
     try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() ?? "";
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? "";
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith("data: ")) continue;
-        const data = trimmed.slice(6);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith("data: ")) continue;
+          const data = trimmed.slice(6);
 
-        try {
-          const event = JSON.parse(data) as {
-            type: string;
-            message?: { usage?: { input_tokens: number; output_tokens: number } };
-            content_block?: { type: string };
-            delta?: { type: string; text?: string; thinking?: string };
-            usage?: { output_tokens: number };
-          };
-          // Capture input token count from message_start
-          if (event.type === "message_start" && event.message?.usage) {
-            inputTokens = event.message.usage.input_tokens;
-            outputTokens = event.message.usage.output_tokens;
-          }
-          // Capture final output token count from message_delta
-          if (event.type === "message_delta" && event.usage) {
-            outputTokens = event.usage.output_tokens;
-          }
-          // Track block type (thinking vs text)
-          if (event.type === "content_block_start" && event.content_block) {
-            currentBlockType = event.content_block.type;
-          }
-          if (event.type === "content_block_delta") {
-            if (currentBlockType === "thinking" && event.delta?.thinking && options.onThinking) {
-              options.onThinking(event.delta.thinking);
-            } else if (event.delta?.text) {
-              yield event.delta.text;
+          try {
+            const event = JSON.parse(data) as {
+              type: string;
+              message?: { usage?: { input_tokens: number; output_tokens: number } };
+              content_block?: { type: string };
+              delta?: { type: string; text?: string; thinking?: string };
+              usage?: { output_tokens: number };
+            };
+            // Capture input token count from message_start
+            if (event.type === "message_start" && event.message?.usage) {
+              inputTokens = event.message.usage.input_tokens;
+              outputTokens = event.message.usage.output_tokens;
             }
-          }
-          if (event.type === "message_stop") {
-            if (inputTokens || outputTokens) {
-              return {
-                promptTokens: inputTokens,
-                completionTokens: outputTokens,
-                totalTokens: inputTokens + outputTokens,
-              };
+            // Capture final output token count from message_delta
+            if (event.type === "message_delta" && event.usage) {
+              outputTokens = event.usage.output_tokens;
             }
-            return;
+            // Track block type (thinking vs text)
+            if (event.type === "content_block_start" && event.content_block) {
+              currentBlockType = event.content_block.type;
+            }
+            if (event.type === "content_block_delta") {
+              if (currentBlockType === "thinking" && event.delta?.thinking && options.onThinking) {
+                options.onThinking(event.delta.thinking);
+              } else if (event.delta?.text) {
+                yield event.delta.text;
+              }
+            }
+            if (event.type === "message_stop") {
+              if (inputTokens || outputTokens) {
+                return {
+                  promptTokens: inputTokens,
+                  completionTokens: outputTokens,
+                  totalTokens: inputTokens + outputTokens,
+                };
+              }
+              return;
+            }
+          } catch {
+            // Skip malformed lines
           }
-        } catch {
-          // Skip malformed lines
         }
       }
-    }
     } finally {
       if (options.signal) options.signal.removeEventListener("abort", onAbort);
     }

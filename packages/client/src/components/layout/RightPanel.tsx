@@ -19,7 +19,9 @@ const AgentsPanel = lazy(() => import("../panels/AgentsPanel").then((module) => 
 const PersonasPanel = lazy(() =>
   import("../panels/PersonasPanel").then((module) => ({ default: module.PersonasPanel })),
 );
-const SettingsPanel = lazy(() => import("../panels/SettingsPanel").then((module) => ({ default: module.SettingsPanel })));
+const SettingsPanel = lazy(() =>
+  import("../panels/SettingsPanel").then((module) => ({ default: module.SettingsPanel })),
+);
 const BotBrowserPanel = lazy(() =>
   import("../panels/BotBrowserPanel").then((module) => ({ default: module.BotBrowserPanel })),
 );
@@ -50,7 +52,9 @@ const PANELS: Record<string, LazyExoticComponent<ComponentType>> = {
 const mountedPanels = new Set<string>();
 
 function PanelFallback() {
-  return <div className="flex h-full items-center justify-center text-sm text-[var(--muted-foreground)]">Loading...</div>;
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-[var(--muted-foreground)]">Loading...</div>
+  );
 }
 
 export function RightPanel() {

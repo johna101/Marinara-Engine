@@ -529,7 +529,10 @@ export const ConversationMessage = memo(function ConversationMessage({
               {/* First row: Avatar + Name + first paragraph */}
               {(() => {
                 // Split into paragraphs (on blank lines) for Discord-style compact display
-                const paragraphs = combinedText.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+                const paragraphs = combinedText
+                  .split(/\n{2,}/)
+                  .map((p) => p.trim())
+                  .filter(Boolean);
                 if (paragraphs.length === 0) return null;
                 return (
                   <>
@@ -563,16 +566,27 @@ export const ConversationMessage = memo(function ConversationMessage({
                         </div>
                         <div className="text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap">
                           {mentionNames.length
-                            ? highlightMentions(applyInlineMarkdown(paragraphs[0]!, `gs${i}_0`), mentionNames, `gs${i}_0`)
+                            ? highlightMentions(
+                                applyInlineMarkdown(paragraphs[0]!, `gs${i}_0`),
+                                mentionNames,
+                                `gs${i}_0`,
+                              )
                             : applyInlineMarkdown(paragraphs[0]!, `gs${i}_0`)}
                         </div>
                       </div>
                     </div>
                     {/* Subsequent paragraphs — indented to align with text (no avatar/name) */}
                     {paragraphs.slice(1).map((para, pi) => (
-                      <div key={pi} className="pl-14 mt-0.5 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap">
+                      <div
+                        key={pi}
+                        className="pl-14 mt-0.5 text-[0.9375rem] leading-relaxed break-words whitespace-pre-wrap"
+                      >
                         {mentionNames.length
-                          ? highlightMentions(applyInlineMarkdown(para, `gs${i}_${pi + 1}`), mentionNames, `gs${i}_${pi + 1}`)
+                          ? highlightMentions(
+                              applyInlineMarkdown(para, `gs${i}_${pi + 1}`),
+                              mentionNames,
+                              `gs${i}_${pi + 1}`,
+                            )
                           : applyInlineMarkdown(para, `gs${i}_${pi + 1}`)}
                       </div>
                     ))}

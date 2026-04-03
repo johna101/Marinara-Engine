@@ -1176,12 +1176,17 @@ export async function generateRoutes(app: FastifyInstance) {
               (hasImageGen ? 1 : 0) +
               (memoryTargetNames.length > 0 ? 1 : 0);
             commandLines.push(
-              `${sceneNum}. SCENE — Initiate a mini-roleplay scene branching from this conversation. Use this when a natural opportunity for an immersive moment arises (e.g., going on a date, exploring a location, a dramatic confrontation). The system will plan and create a complete scene for you.`,
+              `${sceneNum}. SCENE — Initiate a mini-roleplay scene branching from this conversation. The system will plan and create a complete immersive scene for you.`,
               `   Format: [scene: scenario="brief description of what happens in this scene"]`,
               `   Optional background: [scene: scenario="having dinner at an Italian restaurant", background="restaurant"]`,
               `   The scenario is a brief description of the scene setup. The system will handle all other details (first message, system prompt, writing style, etc.) automatically.`,
               `   Example: You agree to go stargazing → include [scene: scenario="lying on a blanket in the park, looking at the stars together"]`,
-              `   IMPORTANT: Only use this when the moment genuinely calls for an immersive scene. Don't overuse it.`,
+              `   WHEN TO USE: You SHOULD proactively trigger a scene whenever the conversation naturally leads to an activity, outing, or situation that would be more immersive as a scene. Examples:`,
+              `   - {{user}} says "I'm coming over" or "Let's go to the park" → trigger a scene for arriving/being at that location.`,
+              `   - You invite {{user}} somewhere and they accept → trigger a scene for that activity.`,
+              `   - A plan is made (date, trip, hangout, confrontation) and the moment arrives → trigger a scene.`,
+              `   - Any significant in-person interaction that would benefit from immersive narration (cooking together, exploring, training, etc.).`,
+              `   Do NOT wait for {{user}} to explicitly ask for a scene. If the conversation implies you and {{user}} are about to DO something together, initiate the scene yourself.`,
               ``,
             );
           }
@@ -3135,7 +3140,9 @@ export async function generateRoutes(app: FastifyInstance) {
               reply.raw.write(`data: ${JSON.stringify({ type: "token", data: chunk })}\n\n`);
             } else {
               for (let i = 0; i < chunk.length; i += STREAM_CHUNK) {
-                reply.raw.write(`data: ${JSON.stringify({ type: "token", data: chunk.slice(i, i + STREAM_CHUNK) })}\n\n`);
+                reply.raw.write(
+                  `data: ${JSON.stringify({ type: "token", data: chunk.slice(i, i + STREAM_CHUNK) })}\n\n`,
+                );
               }
             }
           };
@@ -3836,14 +3843,9 @@ export async function generateRoutes(app: FastifyInstance) {
               // Build the new snapshot from agent output, falling back to previous snapshot.
               const newDate = (gs.date as string) ?? (prevSnap?.date as string | null) ?? null;
               const newTime = (gs.time as string) ?? (prevSnap?.time as string | null) ?? null;
-              const newLocation =
-                (gs.location as string) ?? (prevSnap?.location as string | null) ?? null;
-              const newWeather =
-                (gs.weather as string) ?? (prevSnap?.weather as string | null) ?? null;
-              const newTemperature =
-                (gs.temperature as string) ??
-                (prevSnap?.temperature as string | null) ??
-                null;
+              const newLocation = (gs.location as string) ?? (prevSnap?.location as string | null) ?? null;
+              const newWeather = (gs.weather as string) ?? (prevSnap?.weather as string | null) ?? null;
+              const newTemperature = (gs.temperature as string) ?? (prevSnap?.temperature as string | null) ?? null;
 
               // The world-state agent ONLY produces date/time/location/weather/temperature
               // (and optionally recentEvents).  In batch mode the model often cross-
@@ -3955,8 +3957,7 @@ export async function generateRoutes(app: FastifyInstance) {
               // Ensure a snapshot exists for this (messageId, swipeIndex).
               // If world-state didn't create one, updateByMessage clones the
               // latest snapshot into a new row so we don't corrupt old data.
-              let snap =
-                (await gameStateStore.getByMessage(messageId, targetSwipeIndex));
+              let snap = await gameStateStore.getByMessage(messageId, targetSwipeIndex);
               if (!snap) {
                 await gameStateStore.updateByMessage(messageId, targetSwipeIndex, input.chatId, {});
                 snap = await gameStateStore.getByMessage(messageId, targetSwipeIndex);
@@ -4334,9 +4335,8 @@ export async function generateRoutes(app: FastifyInstance) {
                         (s: any) => s.index === targetSwipeIndex,
                       );
                       if (swipeRow) {
-                        const swipeExtra = typeof swipeRow.extra === "string"
-                          ? JSON.parse(swipeRow.extra)
-                          : (swipeRow.extra ?? {});
+                        const swipeExtra =
+                          typeof swipeRow.extra === "string" ? JSON.parse(swipeRow.extra) : (swipeRow.extra ?? {});
                         const swipeAtts = (swipeExtra.attachments as any[]) ?? [];
                         swipeAtts.push(attachment);
                         await chats.updateSwipeExtra(messageId, targetSwipeIndex, { attachments: swipeAtts });
@@ -4393,7 +4393,8 @@ export async function generateRoutes(app: FastifyInstance) {
                     type: "agent_error",
                     data: {
                       agentType: "illustrator",
-                      error: "No image generation connection set on the Illustrator agent. Go to Settings → Agents → Illustrator and assign an Image Generation Connection.",
+                      error:
+                        "No image generation connection set on the Illustrator agent. Go to Settings → Agents → Illustrator and assign an Image Generation Connection.",
                     },
                   })}\n\n`,
                 );
@@ -5115,6 +5116,8 @@ export async function generateRoutes(app: FastifyInstance) {
                     if (d.system_prompt) parts.push(`System Prompt: ${d.system_prompt}`);
                     if (d.first_mes) parts.push(`First Message: ${d.first_mes}`);
                     if (d.creator_notes) parts.push(`Creator Notes: ${d.creator_notes}`);
+                    if (d.extensions?.appearance) parts.push(`Appearance: ${d.extensions.appearance}`);
+                    if (d.extensions?.backstory) parts.push(`Backstory: ${d.extensions.backstory}`);
                     fetchedContent = parts.join("\n");
                   }
                 } else if (fetchCmd.fetchType === "persona") {

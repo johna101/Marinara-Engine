@@ -9,7 +9,7 @@ import { useChatStore } from "../../stores/chat.store";
 import { useUIStore } from "../../stores/ui.store";
 import { useGenerate } from "../../hooks/use-generate";
 import { useApplyRegex } from "../../hooks/use-apply-regex";
-import { useCreateMessage, chatKeys } from "../../hooks/use-chats";
+import { useCreateMessage, useChat, chatKeys } from "../../hooks/use-chats";
 import {
   matchSlashCommand,
   getSlashCompletions,
@@ -95,6 +95,8 @@ export function ConversationInput({ characterNames = [] }: ConversationInputProp
   const gifButtonRef = useRef<HTMLButtonElement>(null);
   const inputBarRef = useRef<HTMLDivElement>(null);
   const activeChatId = useChatStore((s) => s.activeChatId);
+  const { data: activeChat } = useChat(activeChatId);
+  const chatName = activeChat?.name;
   const streamingChatId = useChatStore((s) => s.streamingChatId);
   const isStreamingGlobal = useChatStore((s) => s.isStreaming);
   const isStreaming = isStreamingGlobal && streamingChatId === activeChatId;
@@ -446,7 +448,7 @@ export function ConversationInput({ characterNames = [] }: ConversationInputProp
     <div className="relative px-3 pb-3">
       {/* Slash command autocomplete */}
       {completions.length > 0 && (
-        <div className="absolute bottom-full left-0 right-0 mb-1 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
+        <div className="absolute bottom-full left-3 right-3 mb-1 overflow-hidden rounded-lg border border-[var(--border)] bg-[var(--card)] shadow-lg">
           {completions.map((cmd, i) => (
             <button
               key={cmd.name}
@@ -556,7 +558,13 @@ export function ConversationInput({ characterNames = [] }: ConversationInputProp
 
         <textarea
           ref={textareaRef}
-          placeholder={characterNames.length > 0 ? `Message @${characterNames[0]}` : "Message..."}
+          placeholder={
+            characterNames.length > 1 && chatName
+              ? `Message ${chatName}, / for commands`
+              : characterNames.length > 0
+                ? `Message @${characterNames[0]}, / for commands`
+                : "Message..."
+          }
           rows={1}
           onInput={handleInput}
           onKeyDown={handleKeyDown}

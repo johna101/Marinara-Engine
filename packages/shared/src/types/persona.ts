@@ -27,6 +27,8 @@ export interface Persona {
   personaStats?: PersonaStatsConfig;
   /** Alternative description extensions (toggleable additions to the main description) */
   altDescriptions?: AltDescription[];
+  /** Tags for organizing personas */
+  tags?: string[];
   createdAt: string;
   updatedAt: string;
 }

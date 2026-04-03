@@ -557,40 +557,40 @@ export function AgentEditor() {
                 ))}
               </select>
               <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
-                The Illustrator uses two connections: the LLM above analyzes the scene and writes an image prompt,
-                then this connection generates the actual image from that prompt.
+                The Illustrator uses two connections: the LLM above analyzes the scene and writes an image prompt, then
+                this connection generates the actual image from that prompt.
               </p>
             </FieldGroup>
           )}
 
           {/* ── Context Size (hidden for Chat Summary — that uses the popover) ── */}
           {!isChatSummaryAgent && (
-          <FieldGroup
-            label="Context Size"
-            icon={<Clock size="0.875rem" className="text-[var(--primary)]" />}
-            help="How many recent chat messages this agent receives as context. More messages = more context but higher token usage. Leave blank for the default (5 messages)."
-          >
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min={1}
-                max={200}
-                value={localContextSize}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setLocalContextSize(v === "" ? "" : Math.max(1, Math.min(200, parseInt(v) || 1)));
-                  markDirty();
-                }}
-                placeholder="5"
-                className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-              />
-              <span className="text-[0.6875rem] text-[var(--muted-foreground)]">messages</span>
-            </div>
-            <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
-              Each agent only sees its own context size. When agents are batched together (same model), the highest
-              context size in the batch is used.
-            </p>
-          </FieldGroup>
+            <FieldGroup
+              label="Context Size"
+              icon={<Clock size="0.875rem" className="text-[var(--primary)]" />}
+              help="How many recent chat messages this agent receives as context. More messages = more context but higher token usage. Leave blank for the default (5 messages)."
+            >
+              <div className="flex items-center gap-3">
+                <input
+                  type="number"
+                  min={1}
+                  max={200}
+                  value={localContextSize}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setLocalContextSize(v === "" ? "" : Math.max(1, Math.min(200, parseInt(v) || 1)));
+                    markDirty();
+                  }}
+                  placeholder="5"
+                  className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                />
+                <span className="text-[0.6875rem] text-[var(--muted-foreground)]">messages</span>
+              </div>
+              <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                Each agent only sees its own context size. When agents are batched together (same model), the highest
+                context size in the batch is used.
+              </p>
+            </FieldGroup>
           )}
 
           {/* ── Triggers After (Chat Summary agent) ── */}

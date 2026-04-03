@@ -91,9 +91,5 @@ export function ModalRenderer() {
       content = null;
   }
 
-  return (
-    <Suspense fallback={null}>
-      {content}
-    </Suspense>
-  );
+  return <Suspense fallback={null}>{content}</Suspense>;
 }

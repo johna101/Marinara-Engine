@@ -31,6 +31,8 @@ export interface Lorebook {
   chatId: string | null;
   /** Whether this lorebook is globally active */
   enabled: boolean;
+  /** Tags for organizing/filtering lorebooks */
+  tags: string[];
   /** Agent/generation origin tracking */
   generatedBy: "user" | "agent" | "import" | null;
   sourceAgentId: string | null;

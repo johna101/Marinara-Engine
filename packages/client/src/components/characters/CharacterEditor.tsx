@@ -543,17 +543,21 @@ function MetadataTab({
 
   // Drag-to-reposition state
   const dragRef = useRef<{ startX: number; startY: number; startOX: number; startOY: number } | null>(null);
+  const didDragRef = useRef(false);
   const previewRef = useRef<HTMLDivElement>(null);
+  const [showFullImage, setShowFullImage] = useState(false);
 
   const onPointerDown = (e: React.PointerEvent) => {
     if (crop.zoom <= 1) return;
     e.preventDefault();
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     dragRef.current = { startX: e.clientX, startY: e.clientY, startOX: crop.offsetX, startOY: crop.offsetY };
+    didDragRef.current = false;
   };
 
   const onPointerMove = (e: React.PointerEvent) => {
     if (!dragRef.current || !previewRef.current) return;
+    didDragRef.current = true;
     const rect = previewRef.current.getBoundingClientRect();
     const dx = ((e.clientX - dragRef.current.startX) / rect.width) * 100;
     const dy = ((e.clientY - dragRef.current.startY) / rect.height) * 100;
@@ -586,6 +590,10 @@ function MetadataTab({
               onPointerMove={onPointerMove}
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
+              onClick={() => {
+                if (crop.zoom <= 1 || !didDragRef.current) setShowFullImage(true);
+              }}
+              title="Click to view full image"
             >
               <img
                 src={avatarPreview}
@@ -621,7 +629,7 @@ function MetadataTab({
                 />
               </label>
               <p className="text-[0.625rem] text-[var(--muted-foreground)]">
-                {crop.zoom > 1 ? "Drag the preview to reposition" : "Increase zoom to reposition"}
+                {crop.zoom > 1 ? "Drag the preview to reposition" : "Click preview to view full image"}
               </p>
               {crop.zoom > 1 && (
                 <button
@@ -634,6 +642,24 @@ function MetadataTab({
               )}
             </div>
           </div>
+          {showFullImage && (
+            <div
+              className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80"
+              onClick={() => setShowFullImage(false)}
+            >
+              <img
+                src={avatarPreview}
+                alt={formData.name}
+                className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain shadow-2xl"
+              />
+              <button
+                onClick={() => setShowFullImage(false)}
+                className="absolute right-3 top-3 rounded-lg bg-black/60 p-2 text-white transition-colors hover:bg-black/80"
+              >
+                <X size="1rem" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 

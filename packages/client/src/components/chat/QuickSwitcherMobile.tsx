@@ -116,9 +116,7 @@ export function QuickSwitcherMobile() {
         title="Quick Switcher"
         className={cn(
           "flex h-8 w-8 items-center justify-center rounded-xl transition-all",
-          open
-            ? "text-foreground bg-foreground/10"
-            : "text-foreground/70 hover:bg-foreground/10 hover:text-foreground",
+          open ? "text-foreground bg-foreground/10" : "text-foreground/70 hover:bg-foreground/10 hover:text-foreground",
         )}
       >
         <ChevronUp size="1rem" className={cn("transition-transform", open && "rotate-180")} />
@@ -210,9 +208,7 @@ export function QuickSwitcherMobile() {
                     ?
                   </div>
                   <div className="flex min-w-0 flex-1 flex-col">
-                    <span className={cn("text-xs font-semibold", !activePersonaId && "text-foreground")}>
-                      None
-                    </span>
+                    <span className={cn("text-xs font-semibold", !activePersonaId && "text-foreground")}>None</span>
                     <span className="text-[0.625rem] text-[var(--muted-foreground)]">No persona selected</span>
                   </div>
                   {!activePersonaId && <span className="ml-auto text-[0.6875rem]">✓</span>}

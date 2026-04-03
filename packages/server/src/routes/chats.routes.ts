@@ -246,7 +246,10 @@ export async function chatsRoutes(app: FastifyInstance) {
     if (clearOverrides && updated) {
       const { eq } = await import("drizzle-orm");
       const { gameStateSnapshots } = await import("../db/schema/index.js");
-      await app.db.update(gameStateSnapshots).set({ manualOverrides: null }).where(eq(gameStateSnapshots.id, (updated as any).id));
+      await app.db
+        .update(gameStateSnapshots)
+        .set({ manualOverrides: null })
+        .where(eq(gameStateSnapshots.id, (updated as any).id));
       updated = { ...updated, manualOverrides: null };
     }
     // If no snapshot exists yet, create one so manual edits aren't lost
@@ -914,7 +917,10 @@ export async function chatsRoutes(app: FastifyInstance) {
 
     // Accept context size from request body, fall back to chat meta, then default 50
     const body = (req.body ?? {}) as Record<string, unknown>;
-    const contextSize = Math.max(5, Math.min(200, Number(body.contextSize) || (chatMeta.summaryContextSize as number) || 50));
+    const contextSize = Math.max(
+      5,
+      Math.min(200, Number(body.contextSize) || (chatMeta.summaryContextSize as number) || 50),
+    );
 
     const connId = chat.connectionId;
     if (!connId) return reply.status(400).send({ error: "No API connection configured for this chat" });
@@ -930,8 +936,7 @@ export async function chatsRoutes(app: FastifyInstance) {
     const summaryAgentCfg = await agentsStore.getByType("chat-summary");
     const defaultAgentConn = await connections.getDefaultForAgents();
 
-    let resolvedConnId: string | null =
-      summaryAgentCfg?.connectionId ?? defaultAgentConn?.id ?? null;
+    let resolvedConnId: string | null = summaryAgentCfg?.connectionId ?? defaultAgentConn?.id ?? null;
 
     // Fall back to the chat connection
     if (!resolvedConnId) {

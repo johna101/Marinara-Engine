@@ -45,7 +45,9 @@ function MainPaneFallback() {
 }
 
 function SidePanelFallback() {
-  return <div className="flex h-full items-center justify-center text-sm text-[var(--muted-foreground)]">Loading...</div>;
+  return (
+    <div className="flex h-full items-center justify-center text-sm text-[var(--muted-foreground)]">Loading...</div>
+  );
 }
 
 export function AppShell() {

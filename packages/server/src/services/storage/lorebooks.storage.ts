@@ -23,6 +23,7 @@ function parseLorebookRow(row: Record<string, unknown>) {
     sourceAgentId: row.sourceAgentId || null,
     characterId: row.characterId || null,
     chatId: row.chatId || null,
+    tags: JSON.parse((row.tags as string) || "[]"),
   };
 }
 
@@ -104,6 +105,7 @@ export function createLorebooksStorage(db: DB) {
         characterId: input.characterId ?? null,
         chatId: input.chatId ?? null,
         enabled: String(input.enabled ?? true),
+        tags: input.tags ? JSON.stringify(input.tags) : "[]",
         generatedBy: input.generatedBy ?? null,
         sourceAgentId: input.sourceAgentId ?? null,
         createdAt: timestamp,
@@ -124,6 +126,7 @@ export function createLorebooksStorage(db: DB) {
       if (input.characterId !== undefined) updates.characterId = input.characterId;
       if (input.chatId !== undefined) updates.chatId = input.chatId;
       if (input.enabled !== undefined) updates.enabled = String(input.enabled);
+      if (input.tags !== undefined) updates.tags = JSON.stringify(input.tags);
       if (input.generatedBy !== undefined) updates.generatedBy = input.generatedBy;
       if (input.sourceAgentId !== undefined) updates.sourceAgentId = input.sourceAgentId;
 

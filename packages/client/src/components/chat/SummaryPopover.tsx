@@ -64,12 +64,15 @@ export function SummaryPopover({ chatId, summary, contextSize, onContextSizeChan
   }, [editing]);
 
   const handleGenerate = useCallback(() => {
-    generateSummary.mutate({ chatId, contextSize }, {
-      onSuccess: (data) => {
-        setDraft(data.summary);
-        setEditing(false);
+    generateSummary.mutate(
+      { chatId, contextSize },
+      {
+        onSuccess: (data) => {
+          setDraft(data.summary);
+          setEditing(false);
+        },
       },
-    });
+    );
   }, [chatId, contextSize, generateSummary]);
 
   const handleSave = useCallback(() => {
@@ -106,7 +109,10 @@ export function SummaryPopover({ chatId, summary, contextSize, onContextSizeChan
             Chat Summary
           </div>
           <div className="flex items-center gap-1">
-            <div className="flex items-center gap-1 mr-1" title="Context size — number of recent messages used for summary generation">
+            <div
+              className="flex items-center gap-1 mr-1"
+              title="Context size — number of recent messages used for summary generation"
+            >
               <input
                 type="number"
                 min={5}
@@ -114,11 +120,16 @@ export function SummaryPopover({ chatId, summary, contextSize, onContextSizeChan
                 value={contextSize === 0 ? "" : contextSize}
                 onChange={(e) => {
                   const raw = e.target.value;
-                  if (raw === "") { onContextSizeChange(0); return; }
+                  if (raw === "") {
+                    onContextSizeChange(0);
+                    return;
+                  }
                   const v = Math.max(5, Math.min(200, parseInt(raw) || 50));
                   onContextSizeChange(v);
                 }}
-                onBlur={() => { if (!contextSize) onContextSizeChange(50); }}
+                onBlur={() => {
+                  if (!contextSize) onContextSizeChange(50);
+                }}
                 className="w-12 rounded-md bg-[var(--secondary)] px-1.5 py-0.5 text-center text-[0.625rem] tabular-nums ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
               />
             </div>

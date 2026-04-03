@@ -186,9 +186,7 @@ export function ChatCommonOverlays({
         </Suspense>
       )}
       {chat && (
-        <Suspense fallback={null}>
-          {wizardOpen && <ChatSetupWizard chat={chat} onFinish={onWizardFinish} />}
-        </Suspense>
+        <Suspense fallback={null}>{wizardOpen && <ChatSetupWizard chat={chat} onFinish={onWizardFinish} />}</Suspense>
       )}
       <PinnedImageOverlay activeChatId={activeChatId} />
       <Suspense fallback={null}>

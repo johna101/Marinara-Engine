@@ -75,6 +75,10 @@ export const createCharacterSchema = z.object({
   data: characterDataSchema,
 });
 
+export const updateCharacterSchema = z.object({
+  data: characterDataSchema.partial(),
+});
+
 export const createGroupSchema = z.object({
   name: z.string().min(1),
   description: z.string().default(""),
@@ -92,6 +96,7 @@ export const createPersonaGroupSchema = z.object({
 export const updatePersonaGroupSchema = createPersonaGroupSchema.partial();
 
 export type CreateCharacterInput = z.infer<typeof createCharacterSchema>;
+export type UpdateCharacterInput = z.infer<typeof updateCharacterSchema>;
 export type CharacterCardV2Input = z.infer<typeof characterCardV2Schema>;
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
 export type UpdateGroupInput = z.infer<typeof updateGroupSchema>;

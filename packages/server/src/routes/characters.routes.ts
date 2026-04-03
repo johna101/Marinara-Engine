@@ -4,6 +4,7 @@
 import type { FastifyInstance } from "fastify";
 import {
   createCharacterSchema,
+  updateCharacterSchema,
   createGroupSchema,
   updateGroupSchema,
   createPersonaGroupSchema,
@@ -41,7 +42,7 @@ export async function charactersRoutes(app: FastifyInstance) {
 
   app.patch<{ Params: { id: string } }>("/:id", async (req) => {
     const body = req.body as Record<string, unknown>;
-    const update = createCharacterSchema.partial().parse(req.body);
+    const update = updateCharacterSchema.parse(req.body);
     const avatarPath = typeof body.avatarPath === "string" ? body.avatarPath : undefined;
     return storage.update(req.params.id, update.data ?? {}, avatarPath);
   });

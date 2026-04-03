@@ -2,6 +2,7 @@
 // Panel: User Personas
 // ──────────────────────────────────────────────
 import { useState, useRef, useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import {
   usePersonas,
   useCreatePersona,
@@ -12,6 +13,7 @@ import {
   useCreatePersonaGroup,
   useUpdatePersonaGroup,
   useDeletePersonaGroup,
+  useUpdatePersona,
 } from "../../hooks/use-characters";
 import { useUIStore } from "../../stores/ui.store";
 import {
@@ -34,6 +36,7 @@ import {
   X,
   UserPlus,
   UserMinus,
+  Tag,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
@@ -50,6 +53,7 @@ type PersonaRow = {
   avatarPath: string | null;
   isActive: string | boolean;
   createdAt: string;
+  tags?: string;
 };
 
 type PersonaGroupRow = { id: string; name: string; description: string; personaIds: string };
@@ -65,6 +69,7 @@ export function PersonasPanel() {
   const { data: personas, isLoading } = usePersonas();
   const createPersona = useCreatePersona();
   const deletePersona = useDeletePersona();
+  const updatePersona = useUpdatePersona();
   const activatePersona = useActivatePersona();
   const uploadAvatar = useUploadPersonaAvatar();
   const { data: personaGroupsRaw } = usePersonaGroups();
@@ -79,6 +84,8 @@ export function PersonasPanel() {
   const [sort, setSort] = useState<SortOption>("name-asc");
   const [search, setSearch] = useState("");
   const [favFilter, setFavFilter] = useState<"all" | "active" | "inactive">("all");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [tagsExpanded, setTagsExpanded] = useState(false);
 
   // Groups state
   const [groupsExpanded, setGroupsExpanded] = useState(true);
@@ -121,6 +128,39 @@ export function PersonasPanel() {
   );
 
   const rawList = useMemo(() => (personas as PersonaRow[] | undefined) ?? [], [personas]);
+
+  const parseTags = (p: PersonaRow): string[] => {
+    try {
+      return p.tags ? JSON.parse(p.tags) : [];
+    } catch {
+      return [];
+    }
+  };
+
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    for (const p of rawList) {
+      for (const t of parseTags(p)) tagSet.add(t);
+    }
+    return [...tagSet].sort((a, b) => a.localeCompare(b));
+  }, [rawList]);
+
+  const handleDeleteTag = useCallback(
+    async (tag: string) => {
+      if (!confirm(`Remove tag "${tag}" from all personas?`)) return;
+      try {
+        const affected = rawList.filter((p) => parseTags(p).includes(tag));
+        for (const p of affected) {
+          const newTags = parseTags(p).filter((t) => t !== tag);
+          await updatePersona.mutateAsync({ id: p.id, tags: JSON.stringify(newTags) });
+        }
+        if (activeTag === tag) setActiveTag(null);
+      } catch {
+        toast.error("Failed to remove tag from some personas");
+      }
+    },
+    [rawList, updatePersona, activeTag],
+  );
 
   const personaMap = useMemo(() => {
     const map = new Map<string, PersonaRow>();
@@ -185,11 +225,16 @@ export function PersonasPanel() {
         (p) =>
           p.name.toLowerCase().includes(q) ||
           (p.description ?? "").toLowerCase().includes(q) ||
-          (p.comment ?? "").toLowerCase().includes(q),
+          (p.comment ?? "").toLowerCase().includes(q) ||
+          parseTags(p).some((t) => t.toLowerCase().includes(q)),
       );
     }
+    // Filter by active tag
+    if (activeTag) {
+      arr = arr.filter((p) => parseTags(p).includes(activeTag));
+    }
     return arr;
-  }, [rawList, favFilter, search]);
+  }, [rawList, favFilter, search, activeTag]);
 
   const list = useMemo(() => {
     const arr = [...filteredList];
@@ -269,6 +314,71 @@ export function PersonasPanel() {
           </button>
         ))}
       </div>
+
+      {/* Tag filter bar */}
+      {allTags.length > 0 && (
+        <div className="space-y-1">
+          <button
+            onClick={() => setTagsExpanded(!tagsExpanded)}
+            className={cn(
+              "flex items-center gap-1.5 rounded-lg px-2 py-1 text-[0.625rem] font-medium transition-all",
+              activeTag
+                ? "bg-emerald-400/15 text-emerald-400"
+                : "bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+            )}
+          >
+            <Tag size="0.625rem" />
+            Tags ({allTags.length}){activeTag && <span className="ml-0.5 opacity-70">· {activeTag}</span>}
+            <ChevronDown size="0.625rem" className={cn("transition-transform", tagsExpanded && "rotate-180")} />
+          </button>
+          {tagsExpanded && (
+            <div className="flex flex-wrap gap-1">
+              {activeTag && (
+                <button
+                  onClick={() => setActiveTag(null)}
+                  className="flex items-center gap-1 rounded-full bg-[var(--destructive)]/10 px-2 py-0.5 text-[0.625rem] font-medium text-[var(--destructive)] transition-all hover:bg-[var(--destructive)]/20"
+                >
+                  <X size="0.5rem" /> Clear
+                </button>
+              )}
+              {allTags.map((tag) => (
+                <div
+                  key={tag}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setActiveTag(activeTag === tag ? null : tag);
+                    }
+                  }}
+                  className={cn(
+                    "group/tag flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.625rem] font-medium transition-all cursor-pointer",
+                    activeTag === tag
+                      ? "bg-emerald-400/20 text-emerald-400 ring-1 ring-emerald-400/30"
+                      : "bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
+                  )}
+                >
+                  <Tag size="0.5rem" />
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTag(tag);
+                    }}
+                    className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-[var(--destructive)]/20 hover:text-[var(--destructive)]"
+                    title={`Delete tag "${tag}"`}
+                  >
+                    <X size="0.5rem" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-1.5">

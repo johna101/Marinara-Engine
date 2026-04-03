@@ -114,6 +114,8 @@ interface ChatMessageProps {
   chatCharacterIds?: string[];
   /** Distance from the latest message (0 = newest). Used for depth-range regex filtering. */
   messageDepth?: number;
+  /** 1-based ordinal position in the message list. Shown under avatar when actions visible. */
+  messageIndex?: number;
   multiSelectMode?: boolean;
   isSelected?: boolean;
   onToggleSelect?: (messageId: string) => void;
@@ -466,6 +468,7 @@ export const ChatMessage = memo(function ChatMessage({
   groupChatMode,
   chatCharacterIds,
   messageDepth,
+  messageIndex,
   multiSelectMode,
   isSelected,
   onToggleSelect,
@@ -867,7 +870,7 @@ export const ChatMessage = memo(function ChatMessage({
           )}
           {/* Avatar Column */}
           {!isGrouped && (
-            <div className="mari-message-avatar flex-shrink-0 pt-1">
+            <div className="mari-message-avatar flex flex-col items-center flex-shrink-0 pt-1">
               {isMergedGroup && mergedAvatars.length > 0 ? (
                 <div
                   className="rpg-avatar-glow relative h-10 w-10 cursor-pointer overflow-hidden rounded-full ring-2 ring-white/10"
@@ -914,6 +917,11 @@ export const ChatMessage = memo(function ChatMessage({
                 >
                   {isUser ? <User size="1rem" className="text-white" /> : <Bot size="1rem" className="text-white" />}
                 </div>
+              )}
+              {showActions && messageIndex != null && (
+                <span className="mt-1 text-[0.5625rem] font-medium text-[var(--muted-foreground)] select-none">
+                  #{messageIndex}
+                </span>
               )}
             </div>
           )}
@@ -1174,7 +1182,12 @@ export const ChatMessage = memo(function ChatMessage({
       >
         {/* Avatar — only show for first in group */}
         {(!isUser || avatarUrl) && (
-          <div className={cn("mari-message-avatar flex-shrink-0 self-end", isGrouped && "invisible")}>
+          <div
+            className={cn(
+              "mari-message-avatar flex flex-col items-center flex-shrink-0 self-end",
+              isGrouped && "invisible",
+            )}
+          >
             {isMergedGroup && mergedAvatars.length > 0 ? (
               <div
                 className="relative h-8 w-8 cursor-pointer overflow-hidden rounded-full"
@@ -1213,6 +1226,11 @@ export const ChatMessage = memo(function ChatMessage({
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[var(--accent)] text-[0.6875rem] font-bold text-[var(--muted-foreground)]">
                 {displayName[0]}
               </div>
+            )}
+            {showActions && messageIndex != null && (
+              <span className="mt-0.5 text-[0.5rem] font-medium text-[var(--muted-foreground)] select-none">
+                #{messageIndex}
+              </span>
             )}
           </div>
         )}

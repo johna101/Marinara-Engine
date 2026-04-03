@@ -33,7 +33,10 @@ function parseJsonIfString<T>(value: T | string): T {
   return (typeof value === "string" ? JSON.parse(value) : value) as T;
 }
 
-async function resolvePersonaContext(chars: ReturnType<typeof createCharactersStorage>, chat: any): Promise<PersonaContext> {
+async function resolvePersonaContext(
+  chars: ReturnType<typeof createCharactersStorage>,
+  chat: any,
+): Promise<PersonaContext> {
   let personaName = "User";
   let personaDescription = "";
   let personaFields: PersonaContext["personaFields"] = {};
@@ -95,7 +98,17 @@ async function buildRetryAgentContext(args: {
   gameStateStore: ReturnType<typeof createGameStateStorage>;
   lorebooksStore: ReturnType<typeof createLorebooksStorage>;
 }) {
-  const { chatId, chat, chatMeta, recentMessages, enabledConfigs, lastAssistant, chars, gameStateStore, lorebooksStore } = args;
+  const {
+    chatId,
+    chat,
+    chatMeta,
+    recentMessages,
+    enabledConfigs,
+    lastAssistant,
+    chars,
+    gameStateStore,
+    lorebooksStore,
+  } = args;
 
   const characterIds: string[] =
     typeof chat.characterIds === "string" ? JSON.parse(chat.characterIds) : (chat.characterIds ?? []);
@@ -335,8 +348,21 @@ async function applyRetryResultEffects(args: {
   lorebooksStore: ReturnType<typeof createLorebooksStorage>;
   gameStateStore: ReturnType<typeof createGameStateStorage>;
 }) {
-  const { app, reply, chatId, chat, retryMessageId, retrySwipeIndex, results, agentContext, lorebooksStore, gameStateStore } = args;
-  const sortedResults = [...results].sort((a, b) => (a.type === "game_state_update" ? 0 : 1) - (b.type === "game_state_update" ? 0 : 1));
+  const {
+    app,
+    reply,
+    chatId,
+    chat,
+    retryMessageId,
+    retrySwipeIndex,
+    results,
+    agentContext,
+    lorebooksStore,
+    gameStateStore,
+  } = args;
+  const sortedResults = [...results].sort(
+    (a, b) => (a.type === "game_state_update" ? 0 : 1) - (b.type === "game_state_update" ? 0 : 1),
+  );
 
   for (const result of sortedResults) {
     if (result.success && result.type === "game_state_update" && result.data && typeof result.data === "object") {
@@ -357,7 +383,12 @@ async function applyRetryResultEffects(args: {
       }
     }
 
-    if (result.success && result.type === "character_tracker_update" && result.data && typeof result.data === "object") {
+    if (
+      result.success &&
+      result.type === "character_tracker_update" &&
+      result.data &&
+      typeof result.data === "object"
+    ) {
       try {
         const ctData = result.data as Record<string, unknown>;
         const presentCharacters = (ctData.presentCharacters as any[]) ?? [];
@@ -377,7 +408,8 @@ async function applyRetryResultEffects(args: {
         const status = (psData.status as string) ?? "";
         const inventory = (psData.inventory as any[]) ?? [];
         const latest =
-          (await gameStateStore.getByMessage(retryMessageId, retrySwipeIndex)) ?? (await gameStateStore.getLatest(chatId));
+          (await gameStateStore.getByMessage(retryMessageId, retrySwipeIndex)) ??
+          (await gameStateStore.getLatest(chatId));
         if (latest) {
           const updates: Record<string, unknown> = {};
           if (bars.length > 0) updates.personaStats = JSON.stringify(bars);
@@ -473,7 +505,8 @@ async function applyRetryResultEffects(args: {
         );
         if (updates.length > 0) {
           const snap =
-            (await gameStateStore.getByMessage(retryMessageId, retrySwipeIndex)) ?? (await gameStateStore.getLatest(chatId));
+            (await gameStateStore.getByMessage(retryMessageId, retrySwipeIndex)) ??
+            (await gameStateStore.getLatest(chatId));
           const existingPS = snap?.playerStats
             ? typeof snap.playerStats === "string"
               ? JSON.parse(snap.playerStats)
@@ -525,7 +558,8 @@ async function applyRetryResultEffects(args: {
         const fields = (ctData.fields as any[]) ?? [];
         if (fields.length > 0) {
           const snap =
-            (await gameStateStore.getByMessage(retryMessageId, retrySwipeIndex)) ?? (await gameStateStore.getLatest(chatId));
+            (await gameStateStore.getByMessage(retryMessageId, retrySwipeIndex)) ??
+            (await gameStateStore.getLatest(chatId));
           if (snap) {
             const existingPS = snap.playerStats
               ? typeof snap.playerStats === "string"

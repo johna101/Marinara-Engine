@@ -637,9 +637,7 @@ export function useGenerate() {
                     );
                     avatarPath = charList?.find((c) => c.id === turn.characterId)?.avatarPath ?? null;
                   }
-                  useChatStore
-                    .getState()
-                    .addNotification(params.chatId, turn.characterName, avatarPath);
+                  useChatStore.getState().addNotification(params.chatId, turn.characterName, avatarPath);
                   const chatList = qc.getQueryData<Chat[]>(chatKeys.list());
                   const thisChat = chatList?.find((c) => c.id === params.chatId);
                   const isRpMode = thisChat?.mode === "roleplay" || thisChat?.mode === "visual_novel";
@@ -1040,9 +1038,9 @@ export function useGenerate() {
               charName = parsed?.name ?? "Character";
             }
             if (!charAvatar || charName === "Character") {
-              const charList = qc.getQueryData<Array<{ id: string; data?: string | { name?: string }; avatarPath?: string | null }>>(
-                characterKeys.list(),
-              );
+              const charList = qc.getQueryData<
+                Array<{ id: string; data?: string | { name?: string }; avatarPath?: string | null }>
+              >(characterKeys.list());
               const fromList = charList?.find((c) => c.id === firstCharId);
               if (fromList) {
                 if (!charAvatar) charAvatar = fromList.avatarPath ?? null;
@@ -1300,9 +1298,7 @@ export function useGenerate() {
         useChatStore.getState().setAbortController(chatId, null);
         // Refresh game state from DB for the same reason as normal generation
         api
-          .get<import("@marinara-engine/shared").GameState | null>(
-            `/chats/${chatId}/game-state`,
-          )
+          .get<import("@marinara-engine/shared").GameState | null>(`/chats/${chatId}/game-state`)
           .then((gs) => {
             if (gs) useGameStateStore.getState().setGameState(gs);
           })

@@ -1668,9 +1668,7 @@ export function ChatSettingsDrawer({
                         />
                       </div>
                     </button>
-                    {metadata.enableHapticFeedback && (
-                      <HapticConnectionPanel />
-                    )}
+                    {metadata.enableHapticFeedback && <HapticConnectionPanel />}
                   </div>
                 )}
 
@@ -3176,12 +3174,7 @@ function HapticConnectionPanel() {
       {connect.isError && !connected && (
         <p className="text-[0.625rem] text-red-400 px-1">
           Could not connect — make sure{" "}
-          <a
-            href="https://intiface.com/central/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="underline"
-          >
+          <a href="https://intiface.com/central/" target="_blank" rel="noopener noreferrer" className="underline">
             Intiface Central
           </a>{" "}
           is running and the server is started.
@@ -3207,9 +3200,7 @@ function HapticConnectionPanel() {
             <div key={d.index} className="flex items-center gap-1.5 rounded-md bg-[var(--accent)]/50 px-2.5 py-1.5">
               <Vibrate size="0.625rem" className="text-[var(--primary)]" />
               <span className="text-[0.625rem] font-medium">{d.name}</span>
-              <span className="text-[0.5rem] text-[var(--muted-foreground)]">
-                {d.capabilities.join(", ")}
-              </span>
+              <span className="text-[0.5rem] text-[var(--muted-foreground)]">{d.capabilities.join(", ")}</span>
             </div>
           ))}
         </div>

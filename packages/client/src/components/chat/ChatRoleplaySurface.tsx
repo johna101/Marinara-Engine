@@ -969,6 +969,7 @@ export function ChatRoleplaySurface({
                           personaInfo={personaInfo}
                           chatMode={chatMode}
                           messageDepth={messages.length - 1 - i}
+                          messageIndex={i + 1}
                           isGrouped={isGrouped(i)}
                           groupChatMode={groupChatMode}
                           chatCharacterIds={chatCharIds}
@@ -992,6 +993,7 @@ export function ChatRoleplaySurface({
                           personaInfo={personaInfo}
                           chatMode={chatMode}
                           messageDepth={messages.length - 1 - i}
+                          messageIndex={i + 1}
                           isGrouped={isGrouped(i)}
                           groupChatMode={groupChatMode}
                           chatCharacterIds={chatCharIds}

@@ -35,6 +35,8 @@ export const personas = sqliteTable("personas", {
   personaStats: text("persona_stats").notNull().default(""),
   /** Alternative descriptions (JSON array of {id, label, content, active}) */
   altDescriptions: text("alt_descriptions").notNull().default("[]"),
+  /** Tags for organizing personas (JSON array of strings) */
+  tags: text("tags").notNull().default("[]"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });

@@ -2,6 +2,7 @@
 // Panel: Characters (overhauled — search, groups, avatars)
 // ──────────────────────────────────────────────
 import { useState, useMemo, useCallback } from "react";
+import { toast } from "sonner";
 import {
   useCharacters,
   useDeleteCharacter,
@@ -9,6 +10,7 @@ import {
   useCreateGroup,
   useUpdateGroup,
   useDeleteGroup,
+  useUpdateCharacter,
 } from "../../hooks/use-characters";
 import { useUpdateChat, useCreateMessage, chatKeys } from "../../hooks/use-chats";
 import { api } from "../../lib/api-client";
@@ -48,6 +50,7 @@ export function CharactersPanel() {
   const { data: characters, isLoading } = useCharacters();
   const { data: groups } = useCharacterGroups();
   const deleteCharacter = useDeleteCharacter();
+  const updateCharacter = useUpdateCharacter();
   const createGroup = useCreateGroup();
   const updateGroup = useUpdateGroup();
   const deleteGroup = useDeleteGroup();
@@ -141,6 +144,23 @@ export function CharactersPanel() {
     }
     return [...tagSet].sort((a, b) => a.localeCompare(b));
   }, [parsedCharacters]);
+
+  const handleDeleteTag = useCallback(
+    async (tag: string) => {
+      if (!confirm(`Remove tag "${tag}" from all characters?`)) return;
+      try {
+        const affected = parsedCharacters.filter((c) => ((c.parsed.tags ?? []) as string[]).includes(tag));
+        for (const c of affected) {
+          const newTags = ((c.parsed.tags ?? []) as string[]).filter((t) => t !== tag);
+          await updateCharacter.mutateAsync({ id: c.id, data: { tags: newTags } });
+        }
+        if (activeTag === tag) setActiveTag(null);
+      } catch {
+        toast.error("Failed to remove tag from some characters");
+      }
+    },
+    [parsedCharacters, updateCharacter, activeTag],
+  );
 
   const sortedCharacters = useMemo(() => {
     const list = [...filteredCharacters];
@@ -352,11 +372,19 @@ export function CharactersPanel() {
                 </button>
               )}
               {allTags.map((tag) => (
-                <button
+                <div
                   key={tag}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setActiveTag(activeTag === tag ? null : tag);
+                    }
+                  }}
                   className={cn(
-                    "flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.625rem] font-medium transition-all",
+                    "group/tag flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.625rem] font-medium transition-all cursor-pointer",
                     activeTag === tag
                       ? "bg-[var(--primary)]/20 text-[var(--primary)] ring-1 ring-[var(--primary)]/30"
                       : "bg-[var(--secondary)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]",
@@ -364,7 +392,18 @@ export function CharactersPanel() {
                 >
                   <Tag size="0.5rem" />
                   {tag}
-                </button>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteTag(tag);
+                    }}
+                    className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-[var(--destructive)]/20 hover:text-[var(--destructive)]"
+                    title={`Delete tag "${tag}"`}
+                  >
+                    <X size="0.5rem" />
+                  </button>
+                </div>
               ))}
             </div>
           )}

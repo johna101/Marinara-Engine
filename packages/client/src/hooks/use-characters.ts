@@ -164,6 +164,7 @@ export function useUpdatePersona() {
       boxColor?: string;
       personaStats?: string;
       altDescriptions?: string;
+      tags?: string;
     }) => api.patch(`/characters/personas/${id}`, data),
     onSuccess: () => qc.invalidateQueries({ queryKey: characterKeys.personas }),
   });

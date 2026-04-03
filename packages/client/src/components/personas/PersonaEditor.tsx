@@ -24,6 +24,7 @@ import {
   Plus,
   X,
   Maximize2,
+  Tag,
 } from "lucide-react";
 import { cn, generateClientId } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
@@ -64,6 +65,7 @@ interface PersonaFormData {
   boxColor: string;
   personaStats: string;
   altDescriptions: AltDescriptionEntry[];
+  tags: string[];
 }
 
 interface PersonaRow {
@@ -82,6 +84,7 @@ interface PersonaRow {
   boxColor?: string;
   personaStats?: string;
   altDescriptions?: string;
+  tags?: string;
 }
 
 export function PersonaEditor() {
@@ -130,6 +133,13 @@ export function PersonaEditor() {
       boxColor: rawPersona.boxColor ?? "",
       personaStats: rawPersona.personaStats ?? "",
       altDescriptions: parsedAltDescs,
+      tags: (() => {
+        try {
+          return rawPersona.tags ? JSON.parse(rawPersona.tags) : [];
+        } catch {
+          return [];
+        }
+      })(),
     });
     setAvatarPreview(rawPersona.avatarPath);
   }, [rawPersona]);
@@ -143,11 +153,12 @@ export function PersonaEditor() {
     if (!personaId || !formData) return;
     setSaving(true);
     try {
-      const { altDescriptions, ...rest } = formData;
+      const { altDescriptions, tags, ...rest } = formData;
       await updatePersona.mutateAsync({
         id: personaId,
         ...rest,
         altDescriptions: JSON.stringify(altDescriptions),
+        tags: JSON.stringify(tags),
       });
       setDirty(false);
     } finally {
@@ -846,6 +857,22 @@ function DescriptionTab({
 }) {
   const altDescs = formData.altDescriptions;
   const [expandedField, setExpandedField] = useState<"description" | string | null>(null);
+  const [newTag, setNewTag] = useState("");
+
+  const addTag = () => {
+    const tag = newTag.trim();
+    if (!tag) return;
+    if (formData.tags.includes(tag)) return;
+    updateField("tags", [...formData.tags, tag]);
+    setNewTag("");
+  };
+
+  const removeTag = (tag: string) => {
+    updateField(
+      "tags",
+      formData.tags.filter((t) => t !== tag),
+    );
+  };
 
   const updateAltDescs = (next: AltDescriptionEntry[]) => {
     updateField("altDescriptions", next);
@@ -896,6 +923,51 @@ function DescriptionTab({
         <p className="mt-1.5 text-right text-[0.625rem] text-[var(--muted-foreground)]">
           {formData.description.length} characters
         </p>
+      </div>
+
+      {/* Tags */}
+      <div className="space-y-2">
+        <span className="inline-flex items-center gap-1 text-xs font-medium text-[var(--muted-foreground)]">
+          Tags{" "}
+          <HelpTooltip text="Labels for organizing personas. Use tags like 'fantasy', 'modern', 'OC' etc. to categorize and filter." />
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {formData.tags.map((tag) => (
+            <span
+              key={tag}
+              className="flex items-center gap-1 rounded-full bg-emerald-400/10 px-2.5 py-1 text-[0.6875rem] font-medium text-emerald-400"
+            >
+              <Tag size="0.625rem" />
+              {tag}
+              <button
+                onClick={() => removeTag(tag)}
+                className="ml-0.5 rounded-full transition-colors hover:text-[var(--destructive)]"
+              >
+                <X size="0.625rem" />
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="flex gap-1.5">
+          <input
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                addTag();
+              }
+            }}
+            placeholder="Add tag…"
+            className="flex-1 rounded-xl border border-[var(--border)] bg-[var(--secondary)] px-3 py-1.5 text-xs outline-none focus:border-emerald-400/40"
+          />
+          <button
+            onClick={addTag}
+            className="rounded-xl bg-emerald-400/15 px-3 py-1.5 text-xs font-medium text-emerald-400 transition-all hover:bg-emerald-400/25"
+          >
+            Add
+          </button>
+        </div>
       </div>
 
       {/* Alt Descriptions */}

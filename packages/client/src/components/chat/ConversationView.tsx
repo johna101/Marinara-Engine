@@ -909,7 +909,11 @@ function SplitMessageGroup({
         // Strip old-swipe attachments during regeneration so a previous
         // illustration doesn't linger while new text is streaming in.
         const regenExtra = isRegen
-          ? (() => { const p = typeof firstItem.msg.extra === "string" ? JSON.parse(firstItem.msg.extra) : (firstItem.msg.extra ?? {}); return { ...p, attachments: null }; })()
+          ? (() => {
+              const p =
+                typeof firstItem.msg.extra === "string" ? JSON.parse(firstItem.msg.extra) : (firstItem.msg.extra ?? {});
+              return { ...p, attachments: null };
+            })()
           : undefined;
         if (isRegen) {
           // While waiting for content, don't render — the "X is typing..." indicator

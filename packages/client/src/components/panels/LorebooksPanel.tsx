@@ -2,10 +2,26 @@
 // Panel: Lorebooks (overhauled)
 // Category tabs, search, click-to-edit, AI generate
 // ──────────────────────────────────────────────
-import { useState, useMemo } from "react";
-import { Plus, Download, Sparkles, BookOpen, Search, Globe, Users, UserRound, Layers, ArrowUpDown } from "lucide-react";
+import { useState, useMemo, useCallback } from "react";
+import { toast } from "sonner";
+import {
+  Plus,
+  Download,
+  Sparkles,
+  BookOpen,
+  Search,
+  Globe,
+  Users,
+  UserRound,
+  Layers,
+  ArrowUpDown,
+  Tag,
+  ChevronDown,
+  ChevronUp,
+  X,
+} from "lucide-react";
 import { useUIStore } from "../../stores/ui.store";
-import { useLorebooks, useDeleteLorebook } from "../../hooks/use-lorebooks";
+import { useLorebooks, useDeleteLorebook, useUpdateLorebook } from "../../hooks/use-lorebooks";
 import type { Lorebook, LorebookCategory } from "@marinara-engine/shared";
 import { cn } from "../../lib/utils";
 
@@ -29,21 +45,70 @@ export function LorebooksPanel() {
   const [activeCategory, setActiveCategory] = useState<LorebookCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [sort, setSort] = useState<"name-asc" | "name-desc" | "newest" | "oldest" | "tokens">("name-asc");
+  const [activeTag, setActiveTag] = useState<string | null>(null);
+  const [tagsExpanded, setTagsExpanded] = useState(false);
 
   const { data: lorebooks, isLoading } = useLorebooks(activeCategory === "all" ? undefined : activeCategory);
   const deleteLorebook = useDeleteLorebook();
+  const updateLorebook = useUpdateLorebook();
   const openModal = useUIStore((s) => s.openModal);
   const openLorebookDetail = useUIStore((s) => s.openLorebookDetail);
+
+  const parseTags = (lb: Lorebook): string[] => {
+    const raw = lb.tags;
+    if (Array.isArray(raw)) return raw;
+    if (typeof raw === "string")
+      try {
+        return JSON.parse(raw);
+      } catch {
+        return [];
+      }
+    return [];
+  };
+
+  const allTags = useMemo(() => {
+    if (!lorebooks) return [] as string[];
+    const tagSet = new Set<string>();
+    for (const lb of lorebooks as Lorebook[]) {
+      for (const t of parseTags(lb)) tagSet.add(t);
+    }
+    return Array.from(tagSet).sort();
+  }, [lorebooks]);
+
+  const handleDeleteTag = useCallback(
+    async (tag: string) => {
+      if (!confirm(`Remove tag "${tag}" from all lorebooks?`)) return;
+      try {
+        if (!lorebooks) return;
+        const affected = (lorebooks as Lorebook[]).filter((lb) => parseTags(lb).includes(tag));
+        for (const lb of affected) {
+          const newTags = parseTags(lb).filter((t) => t !== tag);
+          await updateLorebook.mutateAsync({ id: lb.id, tags: newTags });
+        }
+        if (activeTag === tag) setActiveTag(null);
+      } catch {
+        toast.error("Failed to remove tag from some lorebooks");
+      }
+    },
+    [lorebooks, updateLorebook, activeTag],
+  );
 
   // Filter by search
   const filtered = useMemo(() => {
     if (!lorebooks) return [];
-    if (!searchQuery) return lorebooks;
+    let list = lorebooks as Lorebook[];
+    if (activeTag) {
+      list = list.filter((lb) => parseTags(lb).includes(activeTag));
+    }
+    if (!searchQuery) return list;
     const q = searchQuery.toLowerCase();
-    return lorebooks.filter(
-      (lb: Lorebook) => lb.name.toLowerCase().includes(q) || lb.description.toLowerCase().includes(q),
+    return list.filter(
+      (lb: Lorebook) =>
+        lb.name.toLowerCase().includes(q) ||
+        lb.description.toLowerCase().includes(q) ||
+        parseTags(lb).some((t) => t.toLowerCase().includes(q)),
     );
-  }, [lorebooks, searchQuery]);
+  }, [lorebooks, searchQuery, activeTag]);
 
   const sorted = useMemo(() => {
     const list = [...filtered];
@@ -158,6 +223,61 @@ export function LorebooksPanel() {
           );
         })}
       </div>
+
+      {/* Tag filter */}
+      {allTags.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1">
+          <button
+            onClick={() => setTagsExpanded(!tagsExpanded)}
+            className="flex items-center gap-1 rounded-lg px-1.5 py-1 text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            title={tagsExpanded ? "Collapse tags" : "Expand tags"}
+          >
+            <Tag size="0.6875rem" />
+            {tagsExpanded ? <ChevronUp size="0.625rem" /> : <ChevronDown size="0.625rem" />}
+          </button>
+          {(tagsExpanded ? allTags : allTags.slice(0, 5)).map((tag) => (
+            <div
+              key={tag}
+              role="button"
+              tabIndex={0}
+              onClick={() => setActiveTag(activeTag === tag ? null : tag)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setActiveTag(activeTag === tag ? null : tag);
+                }
+              }}
+              className={cn(
+                "group/tag flex items-center gap-1 rounded-lg px-2 py-1 text-[0.625rem] font-medium transition-all cursor-pointer",
+                activeTag === tag
+                  ? "bg-amber-400/15 text-amber-400 ring-1 ring-amber-400/30"
+                  : "bg-[var(--secondary)] text-[var(--muted-foreground)] ring-1 ring-[var(--border)] hover:text-[var(--foreground)]",
+              )}
+            >
+              {tag}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteTag(tag);
+                }}
+                className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-[var(--destructive)]/20 hover:text-[var(--destructive)]"
+                title={`Delete tag "${tag}"`}
+              >
+                <X size="0.5rem" />
+              </button>
+            </div>
+          ))}
+          {!tagsExpanded && allTags.length > 5 && (
+            <button
+              onClick={() => setTagsExpanded(true)}
+              className="rounded-lg px-2 py-1 text-[0.625rem] text-[var(--muted-foreground)] transition-colors hover:text-[var(--foreground)]"
+            >
+              +{allTags.length - 5} more
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Loading */}
       {isLoading && (

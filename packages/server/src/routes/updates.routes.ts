@@ -46,11 +46,10 @@ async function getCommitsBehind(): Promise<number | null> {
   try {
     // Fetch latest refs from origin (lightweight, no checkout)
     await execFileAsync("git", ["fetch", "origin", "--quiet"], { cwd: root, timeout: 15_000 });
-    const { stdout } = await execFileAsync(
-      "git",
-      ["rev-list", "--count", "HEAD..origin/main"],
-      { cwd: root, timeout: 5_000 },
-    );
+    const { stdout } = await execFileAsync("git", ["rev-list", "--count", "HEAD..origin/main"], {
+      cwd: root,
+      timeout: 5_000,
+    });
     return parseInt(stdout.trim(), 10) || 0;
   } catch {
     return null;
@@ -245,12 +244,20 @@ export async function updatesRoutes(app: FastifyInstance) {
       // Step 0: stash local changes (pnpm install can modify package.json on some platforms)
       let stashed = false;
       try {
-        const { stdout: diffOut } = await execFileAsync("git", ["diff", "--quiet"], { cwd: root, timeout: 5_000 }).catch(() => ({ stdout: "dirty" }));
+        const { stdout: diffOut } = await execFileAsync("git", ["diff", "--quiet"], {
+          cwd: root,
+          timeout: 5_000,
+        }).catch(() => ({ stdout: "dirty" }));
         if (diffOut === "dirty") {
-          await execFileAsync("git", ["stash", "push", "-q", "-m", "auto-stash before update"], { cwd: root, timeout: 10_000 });
+          await execFileAsync("git", ["stash", "push", "-q", "-m", "auto-stash before update"], {
+            cwd: root,
+            timeout: 10_000,
+          });
           stashed = true;
         }
-      } catch { /* clean tree — nothing to stash */ }
+      } catch {
+        /* clean tree — nothing to stash */
+      }
 
       // Step 1: git pull
       let pullOut: string;
@@ -280,9 +287,14 @@ export async function updatesRoutes(app: FastifyInstance) {
         const currentCommitHash = getBuildCommit();
         let sourceCommit: string | null = null;
         try {
-          const { stdout } = await execFileAsync("git", ["rev-parse", "--short=7", "HEAD"], { cwd: root, timeout: 5_000 });
+          const { stdout } = await execFileAsync("git", ["rev-parse", "--short=7", "HEAD"], {
+            cwd: root,
+            timeout: 5_000,
+          });
           sourceCommit = stdout.trim() || null;
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
 
         // If the commit we're running matches HEAD and version matches, truly up to date
         if (sourceCommit && currentCommitHash && sourceCommit === currentCommitHash) {

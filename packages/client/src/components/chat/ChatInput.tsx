@@ -40,7 +40,12 @@ interface ChatInputProps {
   chatCharacters?: Array<{ id: string; name: string; avatarUrl: string | null }>;
 }
 
-export const ChatInput = memo(function ChatInput({ mode = "conversation", characterNames = [], groupResponseOrder, chatCharacters }: ChatInputProps) {
+export const ChatInput = memo(function ChatInput({
+  mode = "conversation",
+  characterNames = [],
+  groupResponseOrder,
+  chatCharacters,
+}: ChatInputProps) {
   const [hasInput, setHasInput] = useState(false);
   const [completions, setCompletions] = useState<SlashCommand[]>([]);
   const [selectedCompletion, setSelectedCompletion] = useState(0);
@@ -268,7 +273,19 @@ export const ChatInput = memo(function ChatInput({ mode = "conversation", charac
       toast.error(msg);
       console.error("Send failed:", error);
     }
-  }, [activeChatId, isStreaming, generate, applyToUserInput, buildContext, qc, clearInputDraft, attachments, mode, groupResponseOrder, createMessage]);
+  }, [
+    activeChatId,
+    isStreaming,
+    generate,
+    applyToUserInput,
+    buildContext,
+    qc,
+    clearInputDraft,
+    attachments,
+    mode,
+    groupResponseOrder,
+    createMessage,
+  ]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     // Autocomplete navigation
@@ -544,7 +561,15 @@ export const ChatInput = memo(function ChatInput({ mode = "conversation", charac
           ref={textareaRef}
           onChange={handleInput}
           onKeyDown={handleKeyDown}
-          placeholder={activeChatId ? "Type here, / for commands." : "Select a chat first"}
+          placeholder={
+            activeChatId
+              ? characterNames.length > 0
+                ? characterNames.length > 1
+                  ? `Message @${characterNames.join(", @")}, / for commands`
+                  : `Message @${characterNames[0]}, / for commands`
+                : "Type here, / for commands."
+              : "Select a chat first"
+          }
           disabled={!activeChatId}
           rows={1}
           spellCheck
@@ -622,7 +647,9 @@ export const ChatInput = memo(function ChatInput({ mode = "conversation", charac
           <div
             ref={charPickerMenuRef}
             className="fixed z-[9999] flex min-w-[220px] max-w-[280px] max-h-[320px] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)] shadow-2xl"
-            style={charPickerPos ? { left: charPickerPos.left, top: charPickerPos.top } : { visibility: "hidden" as const }}
+            style={
+              charPickerPos ? { left: charPickerPos.left, top: charPickerPos.top } : { visibility: "hidden" as const }
+            }
           >
             <div className="flex items-center justify-center border-b border-[var(--border)] px-3 py-2 text-[0.6875rem] font-semibold">
               Trigger Response
@@ -635,11 +662,7 @@ export const ChatInput = memo(function ChatInput({ mode = "conversation", charac
                   className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)]"
                 >
                   {char.avatarUrl ? (
-                    <img
-                      src={char.avatarUrl}
-                      alt={char.name}
-                      className="h-7 w-7 shrink-0 rounded-full object-cover"
-                    />
+                    <img src={char.avatarUrl} alt={char.name} className="h-7 w-7 shrink-0 rounded-full object-cover" />
                   ) : (
                     <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--secondary)] text-[0.6875rem] font-semibold text-[var(--muted-foreground)]">
                       {(char.name || "?")[0].toUpperCase()}

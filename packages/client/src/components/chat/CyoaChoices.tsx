@@ -25,7 +25,13 @@ export function CyoaChoices({ messages }: Props) {
     if (!messages) return null;
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
     if (!lastAssistant?.extra) return null;
-    const saved = lastAssistant.extra.cyoaChoices;
+    let extra: Record<string, unknown>;
+    try {
+      extra = typeof lastAssistant.extra === "string" ? JSON.parse(lastAssistant.extra) : lastAssistant.extra;
+    } catch {
+      return null;
+    }
+    const saved = extra.cyoaChoices as { label: string; text: string }[] | undefined;
     return saved && saved.length > 0 ? saved : null;
   }, [messages]);
 

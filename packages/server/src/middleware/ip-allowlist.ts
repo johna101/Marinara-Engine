@@ -147,13 +147,11 @@ function buildAllowlist(raw: string | null): CIDREntry[] | null {
   return entries;
 }
 
-let cachedAllowlist:
-  | {
-      raw: string | null;
-      entries: CIDREntry[] | null;
-      announced: boolean;
-    }
-  | null = null;
+let cachedAllowlist: {
+  raw: string | null;
+  entries: CIDREntry[] | null;
+  announced: boolean;
+} | null = null;
 
 function getAllowlist() {
   const raw = getIpAllowlist();

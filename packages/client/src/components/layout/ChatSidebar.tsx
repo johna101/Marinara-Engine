@@ -492,7 +492,9 @@ export function ChatSidebar() {
               )}
             >
               <span className="shrink-0 leading-none">{cfg.icon}</span>
-              <span className="inline-flex min-h-[1rem] items-center whitespace-nowrap pb-px leading-normal">{cfg.label}s</span>
+              <span className="inline-flex min-h-[1rem] items-center whitespace-nowrap pb-px leading-normal">
+                {cfg.label}s
+              </span>
               {tabUnread > 0 && !isActive && (
                 <span className="absolute -top-1 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-red-500 px-0.5 text-[0.5rem] font-bold leading-none text-white">
                   {tabUnread > 99 ? "99+" : tabUnread}

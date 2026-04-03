@@ -41,6 +41,7 @@ import {
   Loader2,
   Check,
   Lock,
+  Tag,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { HelpTooltip } from "../ui/HelpTooltip";
@@ -123,6 +124,8 @@ export function LorebookEditor() {
   const [formRecursive, setFormRecursive] = useState(false);
   const [formMaxRecursionDepth, setFormMaxRecursionDepth] = useState(3);
   const [formCharacterId, setFormCharacterId] = useState<string | null>(null);
+  const [formTags, setFormTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState("");
 
   // ── Form state for entry editor ──
   const [entryForm, setEntryForm] = useState<Partial<LorebookEntry> | null>(null);
@@ -139,6 +142,7 @@ export function LorebookEditor() {
     setFormRecursive(lorebook.recursiveScanning);
     setFormMaxRecursionDepth(lorebook.maxRecursionDepth ?? 3);
     setFormCharacterId(lorebook.characterId ?? null);
+    setFormTags(lorebook.tags ?? []);
     setDirty(false);
   }, [lorebook]);
 
@@ -199,6 +203,7 @@ export function LorebookEditor() {
         recursiveScanning: formRecursive,
         maxRecursionDepth: formMaxRecursionDepth,
         characterId: formCharacterId,
+        tags: formTags,
       });
       setDirty(false);
     } finally {
@@ -215,6 +220,7 @@ export function LorebookEditor() {
     formRecursive,
     formMaxRecursionDepth,
     formCharacterId,
+    formTags,
     updateLorebook,
   ]);
 
@@ -706,6 +712,64 @@ export function LorebookEditor() {
                     rows={3}
                     className="w-full resize-y rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
                   />
+                </div>
+
+                {/* Tags */}
+                <div>
+                  <label className="mb-1.5 flex items-center gap-1 text-xs font-medium">
+                    <Tag size="0.75rem" /> Tags
+                  </label>
+                  <div className="flex flex-wrap gap-1.5 mb-2">
+                    {formTags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="flex items-center gap-1 rounded-lg bg-amber-400/15 px-2 py-1 text-[0.6875rem] font-medium text-amber-400"
+                      >
+                        {tag}
+                        <button
+                          onClick={() => {
+                            setFormTags(formTags.filter((t) => t !== tag));
+                            markDirty();
+                          }}
+                          className="ml-0.5 rounded-full p-0.5 transition-colors hover:bg-amber-400/20"
+                        >
+                          <X size="0.625rem" />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <input
+                      value={newTag}
+                      onChange={(e) => setNewTag(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" && newTag.trim()) {
+                          e.preventDefault();
+                          const t = newTag.trim();
+                          if (!formTags.includes(t)) {
+                            setFormTags([...formTags, t]);
+                            markDirty();
+                          }
+                          setNewTag("");
+                        }
+                      }}
+                      placeholder="Add tag…"
+                      className="flex-1 rounded-xl bg-[var(--secondary)] px-3 py-2 text-xs ring-1 ring-[var(--border)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
+                    />
+                    <button
+                      onClick={() => {
+                        const t = newTag.trim();
+                        if (t && !formTags.includes(t)) {
+                          setFormTags([...formTags, t]);
+                          markDirty();
+                        }
+                        setNewTag("");
+                      }}
+                      className="rounded-xl bg-[var(--secondary)] px-3 py-2 text-xs font-medium ring-1 ring-[var(--border)] transition-colors hover:bg-[var(--accent)]"
+                    >
+                      <Plus size="0.75rem" />
+                    </button>
+                  </div>
                 </div>
 
                 {/* Category */}

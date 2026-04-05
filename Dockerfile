@@ -17,7 +17,9 @@ COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 
 # Install all dependencies (including dev for building)
-RUN pnpm install --frozen-lockfile
+# Use cache mount to avoid storing pnpm store in image
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile
 
 # Copy source code
 COPY tsconfig.base.json ./
@@ -42,7 +44,9 @@ COPY packages/server/package.json packages/server/
 COPY packages/client/package.json packages/client/
 
 # Install production deps only
-RUN pnpm install --frozen-lockfile --prod
+# Use cache mount to avoid storing pnpm store in image
+RUN --mount=type=cache,target=/root/.local/share/pnpm/store \
+    pnpm install --frozen-lockfile --prod
 
 # Copy built artifacts from builder
 COPY --from=builder /app/packages/shared/dist packages/shared/dist

@@ -45,6 +45,7 @@ import { BUILT_IN_AGENTS } from "@marinara-engine/shared";
 import { useTranslationStore } from "../../hooks/use-translate";
 import { mirrorSpritePlacements, normalizeSpritePlacements } from "./sprite-placement";
 import type { CharacterMap, MessageWithSwipes, PeekPromptData } from "./chat-area.types";
+import { RecentChats } from "./RecentChats";
 
 export type { CharacterMap };
 
@@ -718,6 +719,9 @@ export function ChatArea() {
               comingSoon
             />
           </div>
+
+          {/* Recent Chats */}
+          <RecentChats />
 
           <div className="retro-divider w-48" />
 

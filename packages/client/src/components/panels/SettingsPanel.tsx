@@ -1,13 +1,21 @@
 // ──────────────────────────────────────────────
 // Panel: Settings (polished)
 // ──────────────────────────────────────────────
-import { useUIStore, type CustomTheme, type InstalledExtension, type VisualTheme } from "../../stores/ui.store";
+import { useUIStore, type InstalledExtension, type VisualTheme } from "../../stores/ui.store";
 import { cn, generateClientId } from "../../lib/utils";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../../lib/api-client";
 import React, { useRef, useState, useCallback, useEffect } from "react";
 import { toast } from "sonner";
-import { APP_VERSION } from "@marinara-engine/shared";
+import { APP_VERSION, type Theme } from "@marinara-engine/shared";
+import {
+  findDuplicateTheme,
+  useCreateTheme,
+  useDeleteTheme,
+  useSetActiveTheme,
+  useThemes,
+  useUpdateTheme,
+} from "../../hooks/use-themes";
 import {
   Upload,
   X,
@@ -960,13 +968,14 @@ function BackgroundPicker({ selected, onSelect }: { selected: string | null; onS
 }
 
 function ThemesSettings() {
-  const customThemes = useUIStore((s) => s.customThemes);
-  const activeCustomTheme = useUIStore((s) => s.activeCustomTheme);
-  const setActiveCustomTheme = useUIStore((s) => s.setActiveCustomTheme);
-  const addCustomTheme = useUIStore((s) => s.addCustomTheme);
-  const updateCustomTheme = useUIStore((s) => s.updateCustomTheme);
-  const removeCustomTheme = useUIStore((s) => s.removeCustomTheme);
+  const { data: syncedThemes = [], isLoading } = useThemes();
+  const createTheme = useCreateTheme();
+  const updateTheme = useUpdateTheme();
+  const deleteTheme = useDeleteTheme();
+  const setActiveTheme = useSetActiveTheme();
   const fileRef = useRef<HTMLInputElement>(null);
+  const activeCustomTheme = syncedThemes.find((theme) => theme.isActive) ?? null;
+  const isSavingTheme = createTheme.isPending || updateTheme.isPending || setActiveTheme.isPending;
 
   // Editor state
   const [editorOpen, setEditorOpen] = useState(false);
@@ -1003,28 +1012,26 @@ function ThemesSettings() {
     setEditorOpen(true);
   }, []);
 
-  const openEditTheme = useCallback((theme: CustomTheme) => {
+  const openEditTheme = useCallback((theme: Theme) => {
     setEditingId(theme.id);
     setThemeName(theme.name);
     setThemeCss(theme.css);
     setEditorOpen(true);
   }, []);
 
-  const handleSave = useCallback(() => {
+  const handleSave = useCallback(async () => {
     try {
       const name = themeName.trim() || "Untitled Theme";
       if (editingId) {
-        updateCustomTheme(editingId, { name, css: themeCss });
+        await updateTheme.mutateAsync({ id: editingId, name, css: themeCss });
         toast.success(`Theme "${name}" updated`);
       } else {
-        const theme: CustomTheme = {
-          id: crypto.randomUUID(),
+        const theme = await createTheme.mutateAsync({
           name,
           css: themeCss,
           installedAt: new Date().toISOString(),
-        };
-        addCustomTheme(theme);
-        setActiveCustomTheme(theme.id);
+        });
+        await setActiveTheme.mutateAsync(theme.id);
         toast.success(`Theme "${name}" saved and activated`);
       }
       setEditorOpen(false);
@@ -1032,36 +1039,38 @@ function ThemesSettings() {
       console.error("[ThemesSettings] Failed to save theme:", err);
       toast.error("Failed to save theme. Check the browser console for details.");
     }
-  }, [editingId, themeName, themeCss, addCustomTheme, updateCustomTheme, setActiveCustomTheme]);
+  }, [createTheme, editingId, setActiveTheme, themeCss, themeName, updateTheme]);
 
   const handleImportTheme = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const text = await file.text();
-      let themeName: string;
+      let importedThemeName: string;
+      let importedThemeCss: string;
 
       if (file.name.endsWith(".json")) {
         const parsed = JSON.parse(text);
-        const theme: CustomTheme = {
-          id: generateClientId(),
-          name: parsed.name ?? file.name.replace(/\.json$/, ""),
-          css: parsed.css ?? "",
-          installedAt: new Date().toISOString(),
-        };
-        themeName = theme.name;
-        addCustomTheme(theme);
+        importedThemeName =
+          typeof parsed.name === "string" && parsed.name.trim() ? parsed.name : file.name.replace(/\.json$/, "");
+        importedThemeCss = typeof parsed.css === "string" ? parsed.css : "";
       } else {
-        const theme: CustomTheme = {
-          id: generateClientId(),
-          name: file.name.replace(/\.css$/, ""),
-          css: text,
-          installedAt: new Date().toISOString(),
-        };
-        themeName = theme.name;
-        addCustomTheme(theme);
+        importedThemeName = file.name.replace(/\.css$/, "");
+        importedThemeCss = text;
       }
-      toast.success(`Theme "${themeName}" imported`);
+
+      const latestThemes = await api.get<Theme[]>("/themes");
+      const duplicate = findDuplicateTheme(latestThemes, importedThemeName, importedThemeCss);
+      if (duplicate) {
+        toast.success(`Theme "${duplicate.name}" is already synced`);
+      } else {
+        await createTheme.mutateAsync({
+          name: importedThemeName,
+          css: importedThemeCss,
+          installedAt: new Date().toISOString(),
+        });
+        toast.success(`Theme "${importedThemeName}" imported`);
+      }
     } catch (err) {
       console.error("[ThemesSettings] Failed to import theme:", err);
       toast.error("Failed to import theme. Ensure it's a valid CSS or JSON file.");
@@ -1100,10 +1109,11 @@ function ThemesSettings() {
             </button>
             <button
               onClick={handleSave}
-              className="flex items-center gap-1 rounded-md bg-[var(--primary)] px-2.5 py-1 text-[0.625rem] font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 active:scale-95"
+              disabled={isSavingTheme}
+              className="flex items-center gap-1 rounded-md bg-[var(--primary)] px-2.5 py-1 text-[0.625rem] font-medium text-[var(--primary-foreground)] transition-opacity hover:opacity-90 active:scale-95 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <Save size="0.6875rem" />
-              Save
+              {isSavingTheme ? <Loader2 size="0.6875rem" className="animate-spin" /> : <Save size="0.6875rem" />}
+              {isSavingTheme ? "Saving..." : "Save"}
             </button>
           </div>
         </div>
@@ -1171,7 +1181,8 @@ function ThemesSettings() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center gap-1.5 text-xs text-[var(--muted-foreground)]">
         <Palette size="0.75rem" />
-        Create or import custom CSS themes to personalize the look and feel.
+        Create or import custom CSS themes. Themes sync across devices connected to this Marinara server, while
+        extensions stay local to this browser.
       </div>
 
       {/* Action buttons */}
@@ -1195,7 +1206,14 @@ function ThemesSettings() {
       <div className="flex flex-col gap-1.5">
         <span className="text-xs font-medium">Installed Themes</span>
         <button
-          onClick={() => setActiveCustomTheme(null)}
+          onClick={() =>
+            setActiveTheme.mutate(null, {
+              onError: (err) => {
+                console.error("[ThemesSettings] Failed to reset active theme:", err);
+                toast.error("Failed to reset the active theme.");
+              },
+            })
+          }
           className={cn(
             "flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all",
             activeCustomTheme === null
@@ -1209,20 +1227,30 @@ function ThemesSettings() {
         </button>
 
         {/* Custom theme list */}
-        {customThemes.map((t) => (
+        {syncedThemes.map((t) => (
           <div
             key={t.id}
             className={cn(
               "flex items-center gap-2 rounded-lg px-3 py-2 text-xs transition-all",
-              activeCustomTheme === t.id
+              activeCustomTheme?.id === t.id
                 ? "bg-[var(--primary)]/15 text-[var(--primary)] ring-1 ring-[var(--primary)]/30"
                 : "bg-[var(--secondary)] text-[var(--secondary-foreground)] hover:bg-[var(--accent)]",
             )}
           >
-            <button onClick={() => setActiveCustomTheme(t.id)} className="flex flex-1 items-center gap-2 min-w-0">
+            <button
+              onClick={() =>
+                setActiveTheme.mutate(t.id, {
+                  onError: (err) => {
+                    console.error("[ThemesSettings] Failed to activate theme:", err);
+                    toast.error("Failed to activate theme.");
+                  },
+                })
+              }
+              className="flex flex-1 items-center gap-2 min-w-0"
+            >
               <FileCode2 size="0.75rem" className="shrink-0" />
               <span className="truncate">{t.name}</span>
-              {activeCustomTheme === t.id && <Check size="0.75rem" className="shrink-0" />}
+              {activeCustomTheme?.id === t.id && <Check size="0.75rem" className="shrink-0" />}
             </button>
             <button
               onClick={() => openEditTheme(t)}
@@ -1249,8 +1277,15 @@ function ThemesSettings() {
             </button>
             <button
               onClick={() => {
-                if (activeCustomTheme === t.id) setActiveCustomTheme(null);
-                removeCustomTheme(t.id);
+                void (async () => {
+                  try {
+                    await deleteTheme.mutateAsync(t.id);
+                    toast.success(`Theme "${t.name}" removed`);
+                  } catch (err) {
+                    console.error("[ThemesSettings] Failed to remove theme:", err);
+                    toast.error("Failed to remove theme.");
+                  }
+                })();
               }}
               className="rounded p-0.5 text-[var(--muted-foreground)] transition-colors hover:bg-[var(--destructive)]/10 hover:text-[var(--destructive)]"
               title="Remove theme"
@@ -1260,9 +1295,13 @@ function ThemesSettings() {
           </div>
         ))}
 
-        {customThemes.length === 0 && (
+        {isLoading && syncedThemes.length === 0 && (
+          <p className="py-2 text-center text-[0.625rem] text-[var(--muted-foreground)]">Loading synced themes...</p>
+        )}
+
+        {!isLoading && syncedThemes.length === 0 && (
           <p className="py-2 text-center text-[0.625rem] text-[var(--muted-foreground)]">
-            No custom themes installed yet. Create one or import a .css file above.
+            No synced custom themes yet. Create one or import a .css file above.
           </p>
         )}
       </div>
@@ -1273,6 +1312,7 @@ function ThemesSettings() {
         <code className="rounded bg-[var(--secondary)] px-1">--background</code>,{" "}
         <code className="rounded bg-[var(--secondary)] px-1">--primary</code>) or add custom styles. JSON themes should
         have <code className="rounded bg-[var(--secondary)] px-1">{`{ "name": "...", "css": "..." }`}</code> format.
+        Imported theme files sync to this Marinara server but do not auto-activate.
       </div>
     </div>
   );
@@ -1490,7 +1530,7 @@ function ImportSettings() {
         qc.invalidateQueries();
         const s = data.imported;
         toast.success(
-          `Imported: ${s.characters} characters, ${s.personas} personas, ${s.lorebooks} lorebooks, ${s.presets} presets, ${s.agents} agents`,
+          `Imported: ${s.characters} characters, ${s.personas} personas, ${s.lorebooks} lorebooks, ${s.presets} presets, ${s.agents} agents, ${s.themes ?? 0} themes`,
         );
       } else {
         toast.error(`Import failed: ${data.error ?? "Unknown error"}`);
@@ -1504,7 +1544,8 @@ function ImportSettings() {
   return (
     <div className="flex flex-col gap-3">
       <div className="text-xs text-[var(--muted-foreground)]">
-        Import data from Marinara exports, SillyTavern, or other tools.
+        Import data from Marinara exports, SillyTavern, or other tools. Full profile imports also restore synced custom
+        themes.
       </div>
 
       {/* Profile import */}

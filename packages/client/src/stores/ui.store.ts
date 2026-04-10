@@ -20,7 +20,7 @@ export type HudPosition = "top" | "left" | "right";
 export type EchoChamberSide = "top-left" | "top-right" | "bottom-left" | "bottom-right";
 export type UserStatus = "active" | "idle" | "dnd";
 
-/** A user-installed custom theme */
+/** Legacy browser-local custom theme preserved for one-time migration. */
 export interface CustomTheme {
   id: string;
   name: string;
@@ -134,10 +134,13 @@ interface UIState {
   // ── HUD Layout ──
   hudPosition: HudPosition;
 
-  // ── Custom Themes & Extensions ──
-  /** Currently active custom theme id (null = built-in default) */
+  // ── Legacy Custom Themes & Extensions ──
+  /** Legacy active custom theme id (null = built-in default). Migration only. */
   activeCustomTheme: string | null;
+  /** Legacy browser-local custom themes. Migration only. */
   customThemes: CustomTheme[];
+  /** True once legacy browser-local themes have been migrated to the server. */
+  hasMigratedCustomThemesToServer: boolean;
   installedExtensions: InstalledExtension[];
 
   // ── Onboarding ──
@@ -229,6 +232,9 @@ interface UIState {
   setEnterToSendConvo: (v: boolean) => void;
   setWeatherEffects: (v: boolean) => void;
   setHudPosition: (v: HudPosition) => void;
+  /** Legacy migration helpers for browser-local custom themes. */
+  setHasMigratedCustomThemesToServer: (v: boolean) => void;
+  clearLegacyCustomThemes: () => void;
   setActiveCustomTheme: (id: string | null) => void;
   addCustomTheme: (theme: CustomTheme) => void;
   updateCustomTheme: (id: string, patch: Partial<Pick<CustomTheme, "name" | "css">>) => void;
@@ -299,6 +305,7 @@ export const useUIStore = create<UIState>()(
       hudPosition: "top" as HudPosition,
       activeCustomTheme: null,
       customThemes: [],
+      hasMigratedCustomThemesToServer: false,
       installedExtensions: [],
       hasCompletedOnboarding: false,
       linkApiBannerDismissed: false,
@@ -502,6 +509,8 @@ export const useUIStore = create<UIState>()(
       setEnterToSendConvo: (v) => set({ enterToSendConvo: v }),
       setWeatherEffects: (v) => set({ weatherEffects: v }),
       setHudPosition: (v) => set({ hudPosition: v }),
+      setHasMigratedCustomThemesToServer: (v) => set({ hasMigratedCustomThemesToServer: v }),
+      clearLegacyCustomThemes: () => set({ customThemes: [], activeCustomTheme: null }),
       setActiveCustomTheme: (id) => set({ activeCustomTheme: id }),
       addCustomTheme: (theme) => set((s) => ({ customThemes: [...s.customThemes, theme] })),
       updateCustomTheme: (id, patch) =>
@@ -531,7 +540,7 @@ export const useUIStore = create<UIState>()(
     }),
     {
       name: "marinara-engine-ui",
-      version: 6,
+      version: 7,
       // Debounce localStorage writes to avoid sync I/O on every state change
       storage: createJSONStorage(() => {
         let timer: ReturnType<typeof setTimeout> | null = null;
@@ -613,6 +622,12 @@ export const useUIStore = create<UIState>()(
           if (persisted.textStrokeWidth === undefined) persisted.textStrokeWidth = 0.5;
           if (persisted.textStrokeColor === undefined) persisted.textStrokeColor = "#000000";
         }
+        // v6 → v7: add legacy theme migration completion flag
+        if (version <= 6) {
+          if (persisted.hasMigratedCustomThemesToServer === undefined) {
+            persisted.hasMigratedCustomThemesToServer = false;
+          }
+        }
         return persisted;
       },
       partialize: (state) => ({
@@ -647,6 +662,7 @@ export const useUIStore = create<UIState>()(
         enterToSendConvo: state.enterToSendConvo,
         weatherEffects: state.weatherEffects,
         hudPosition: state.hudPosition,
+        hasMigratedCustomThemesToServer: state.hasMigratedCustomThemesToServer,
         activeCustomTheme: state.activeCustomTheme,
         customThemes: state.customThemes,
         installedExtensions: state.installedExtensions,

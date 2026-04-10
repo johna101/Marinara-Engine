@@ -17,6 +17,7 @@ export * from "./types/persona.js";
 export * from "./types/regex.js";
 export * from "./types/export.js";
 export * from "./types/haptic.js";
+export * from "./types/theme.js";
 
 // Schemas
 export * from "./schemas/chat.schema.js";
@@ -27,6 +28,7 @@ export * from "./schemas/connection.schema.js";
 export * from "./schemas/agent.schema.js";
 export * from "./schemas/custom-tool.schema.js";
 export * from "./schemas/regex.schema.js";
+export * from "./schemas/theme.schema.js";
 
 // Constants
 export * from "./constants/providers.js";

@@ -9,6 +9,7 @@ import { createCharactersStorage } from "../services/storage/characters.storage.
 import { createLorebooksStorage } from "../services/storage/lorebooks.storage.js";
 import { createPromptsStorage } from "../services/storage/prompts.storage.js";
 import { createAgentsStorage } from "../services/storage/agents.storage.js";
+import { createThemesStorage } from "../services/storage/themes.storage.js";
 import type { ExportEnvelope } from "@marinara-engine/shared";
 import { getDataDir } from "../utils/data-dir.js";
 import { getDatabaseFilePath } from "../config/runtime-config.js";
@@ -96,13 +97,13 @@ export async function backupRoutes(app: FastifyInstance) {
 
   // ── Profile Export ──
   // Returns a portable JSON envelope with characters, personas, lorebooks,
-  // presets (+ groups/sections/choices), agent configs, and connections
-  // (API keys are redacted).
+  // presets (+ groups/sections/choices), agent configs, and synced custom themes.
   app.get("/export-profile", async (_req, reply) => {
     const chars = createCharactersStorage(app.db);
     const lbs = createLorebooksStorage(app.db);
     const presets = createPromptsStorage(app.db);
     const agents = createAgentsStorage(app.db);
+    const themes = createThemesStorage(app.db);
 
     // Characters — include avatar as base64 if available
     const allChars = await chars.list();
@@ -154,6 +155,7 @@ export async function backupRoutes(app: FastifyInstance) {
 
     // Agent configs
     const allAgents = await agents.list();
+    const allThemes = await themes.list();
 
     const envelope: ExportEnvelope = {
       type: "marinara_profile",
@@ -165,6 +167,7 @@ export async function backupRoutes(app: FastifyInstance) {
         lorebooks: lorebookExports,
         presets: presetExports,
         agents: allAgents,
+        themes: allThemes,
       },
     };
 
@@ -187,8 +190,9 @@ export async function backupRoutes(app: FastifyInstance) {
     const lbs = createLorebooksStorage(app.db);
     const presets = createPromptsStorage(app.db);
     const agents = createAgentsStorage(app.db);
+    const themes = createThemesStorage(app.db);
 
-    const stats = { characters: 0, personas: 0, lorebooks: 0, presets: 0, agents: 0 };
+    const stats = { characters: 0, personas: 0, lorebooks: 0, presets: 0, agents: 0, themes: 0 };
 
     // Import characters
     if (Array.isArray(data.characters)) {
@@ -401,6 +405,41 @@ export async function backupRoutes(app: FastifyInstance) {
         } catch {
           /* skip */
         }
+      }
+    }
+
+    // Import synced custom themes
+    let importedActiveThemeId: string | null = null;
+    if (Array.isArray(data.themes)) {
+      for (const theme of data.themes) {
+        try {
+          const duplicate = await themes.findDuplicate(theme.name ?? "", theme.css ?? "");
+          const syncedTheme =
+            duplicate ??
+            (await themes.create({
+              name: theme.name ?? "Imported Theme",
+              css: theme.css ?? "",
+              installedAt: theme.installedAt,
+            }));
+
+          if (!duplicate && syncedTheme) {
+            stats.themes++;
+          }
+
+          if (syncedTheme && (theme.isActive === true || theme.isActive === "true")) {
+            importedActiveThemeId = syncedTheme.id;
+          }
+        } catch {
+          /* skip */
+        }
+      }
+    }
+
+    if (importedActiveThemeId) {
+      try {
+        await themes.setActive(importedActiveThemeId);
+      } catch {
+        /* skip */
       }
     }
 

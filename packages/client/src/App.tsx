@@ -9,6 +9,7 @@ import { CustomThemeInjector } from "./components/layout/CustomThemeInjector";
 import { Toaster } from "sonner";
 import { useUIStore } from "./stores/ui.store";
 import { api } from "./lib/api-client";
+import { useLegacyThemeMigration } from "./hooks/use-themes";
 
 const VERSION_RECOVERY_KEY = "marinara:pwa-version-recovery";
 const VERSION_CHECK_INTERVAL_MS = 5 * 60_000;
@@ -50,6 +51,7 @@ export function App() {
   const visualTheme = useUIStore((s) => s.visualTheme);
   const fontFamily = useUIStore((s) => s.fontFamily);
   const hasModalOpen = useUIStore((s) => s.modal !== null);
+  useLegacyThemeMigration();
 
   // Apply theme + font size to the document root whenever they change
   useEffect(() => {

@@ -4,24 +4,19 @@
 // ──────────────────────────────────────────────
 import { useEffect } from "react";
 import { useUIStore } from "../../stores/ui.store";
+import { useThemes } from "../../hooks/use-themes";
 
 export function CustomThemeInjector() {
-  const activeCustomTheme = useUIStore((s) => s.activeCustomTheme);
-  const customThemes = useUIStore((s) => s.customThemes);
   const installedExtensions = useUIStore((s) => s.installedExtensions);
+  const { data: syncedThemes = [] } = useThemes();
+  const activeTheme = syncedThemes.find((theme) => theme.isActive) ?? null;
 
   // Inject active custom theme CSS
   useEffect(() => {
     const id = "marinara-custom-theme";
     let style = document.getElementById(id) as HTMLStyleElement | null;
 
-    if (!activeCustomTheme) {
-      style?.remove();
-      return;
-    }
-
-    const theme = customThemes.find((t) => t.id === activeCustomTheme);
-    if (!theme) {
+    if (!activeTheme) {
       style?.remove();
       return;
     }
@@ -31,12 +26,12 @@ export function CustomThemeInjector() {
       style.id = id;
       document.head.appendChild(style);
     }
-    style.textContent = theme.css;
+    style.textContent = activeTheme.css;
 
     return () => {
       style?.remove();
     };
-  }, [activeCustomTheme, customThemes]);
+  }, [activeTheme]);
 
   // Inject enabled extension CSS
   useEffect(() => {

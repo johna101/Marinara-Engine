@@ -58,6 +58,7 @@ export async function adminRoutes(app: FastifyInstance) {
       ["agent_runs", schema.agentRuns],
       ["agent_configs", schema.agentConfigs],
       ["game_state_snapshots", schema.gameStateSnapshots],
+      ["custom_themes", schema.customThemes],
       ["assets", schema.assets],
       ["character_groups", schema.characterGroups],
       ["personas", schema.personas],

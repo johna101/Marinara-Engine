@@ -333,6 +333,15 @@ const CREATE_TABLES: string[] = [
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS custom_themes (
+    id TEXT PRIMARY KEY NOT NULL,
+    name TEXT NOT NULL,
+    css TEXT NOT NULL DEFAULT '',
+    installed_at TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    is_active TEXT NOT NULL DEFAULT 'false'
+  )`,
 ];
 
 // ── Column migrations (ALTER TABLE for schema evolution) ──
@@ -488,4 +497,5 @@ export async function runMigrations(db: DB) {
   await db.run(
     sql.raw(`CREATE INDEX IF NOT EXISTS idx_memory_chunks_chat ON memory_chunks(chat_id, last_message_at DESC)`),
   );
+  await db.run(sql.raw(`CREATE INDEX IF NOT EXISTS idx_custom_themes_active ON custom_themes(is_active)`));
 }

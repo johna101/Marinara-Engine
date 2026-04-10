@@ -78,6 +78,8 @@ The only **persisted** store (localStorage via Zustand `persist` middleware). Co
 - **Navigation**: `rightPanel`, `rightPanelOpen`, `sidebarOpen`, `settingsTab`, all `*DetailId` fields, `modal`
 - **Debug**: `debugMode`
 
+Synced custom themes are **not** stored in `ui.store.ts`; they are fetched from the server via React Query and mirrored across devices connected to the same Marinara instance.
+
 #### `chat.store.ts` — Chat Runtime
 
 Non-persisted. Tracks the active chat session:
@@ -403,7 +405,7 @@ The project uses Tailwind CSS v4 with the `@tailwindcss/vite` plugin (no PostCSS
 
 ### Custom Themes
 
-Users can create custom themes via the Settings > Themes panel. Custom theme CSS is injected as `<style>` tags by `CustomThemeInjector.tsx`.
+Users can create custom themes via the Settings > Themes panel. Theme definitions are stored on the Marinara server and sync across connected devices; the active custom theme is also shared. The CSS is injected as a `<style>` tag by `CustomThemeInjector.tsx`.
 
 ---
 

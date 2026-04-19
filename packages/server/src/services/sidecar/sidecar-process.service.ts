@@ -158,6 +158,8 @@ class SidecarProcessService {
       "--log-disable",
       "--ctx-size",
       String(config.contextSize),
+      "-sm",
+      "none",
     ];
 
     const gpuLayers = config.gpuLayers === -1 ? 999 : config.gpuLayers;

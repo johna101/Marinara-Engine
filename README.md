@@ -86,201 +86,30 @@ Detailed release notes now live in [CHANGELOG.md](CHANGELOG.md). Tagged releases
 - Different supported game modes, including more tabletop-like gameplay, point-and-click games, and classic text adventures.
 - Overall improvements and addressing any bugs that pop up along the way.
 
-## Project Docs
+## Installation
 
-- [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow, validation, versioning, and release steps
-- [CLAUDE.md](CLAUDE.md) — thin maintainer notes for contributors using Claude
-- [CHANGELOG.md](CHANGELOG.md) — release notes source of truth
-- [android/README.md](android/README.md) — Android WebView wrapper guide
+| Platform            | Guide                                                                         |
+| ------------------- | ----------------------------------------------------------------------------- |
+| 🐳 Docker / Podman  | [Container Installation Guide](docs/installation/containers.md) — recommended |
+| 🪟 Windows          | [Windows Installation Guide](docs/installation/windows.md)                    |
+| 🍎🐧 macOS / Linux  | [macOS / Linux Installation Guide](docs/installation/macos-linux.md)          |
+| 🤖 Android (Termux) | [Android (Termux) Installation Guide](docs/installation/android-termux.md)    |
+
+Each guide covers installation and updating for that platform.
 
 ---
 
-## Installation
+## Project Docs
 
-### Windows Easiest Method
+- [docs/INSTALLATION.md](docs/INSTALLATION.md) — installation guide index (all platforms)
+- [android/README.md](android/README.md) — Android WebView wrapper guide
+- [CONTRIBUTING.md](CONTRIBUTING.md) — contributor workflow, validation, versioning, and release steps
+- [CLAUDE.md](CLAUDE.md) — thin maintainer notes for contributors using Claude
+- [CHANGELOG.md](CHANGELOG.md) — release notes source of truth
+
+### Windows Installer
 
 Download **[Marinara-Engine-Installer-1.5.3.exe](https://github.com/Pasta-Devs/Marinara-Engine/releases/download/v1.5.3/Marinara-Engine-Installer-1.5.3.exe)** from the [Releases](https://github.com/Pasta-Devs/Marinara-Engine/releases) page and run it. The installer lets you choose the install folder, checks for Node.js and Git, aligns pnpm to the repo-pinned version even if an older global pnpm is already installed, clones the repo, installs dependencies, builds the app, and creates desktop and Start Menu shortcuts with the Marinara icon.
-
-### Run from Source (All Platforms)
-
-#### Prerequisites
-
-You need **Node.js** and **Git** installed before running Marinara Engine. pnpm is handled automatically by the shell launchers, which align to the repo-pinned version even if a different global pnpm is already installed, or you can install it yourself for manual setup.
-
-**Install Node.js v20+:**
-
-| Platform              | How to Install                                                                                  |
-| --------------------- | ----------------------------------------------------------------------------------------------- |
-| Windows               | Download the installer from [nodejs.org](https://nodejs.org/en/download) and run it             |
-| macOS                 | `brew install node` or download from [nodejs.org](https://nodejs.org/en/download)               |
-| Linux (Ubuntu/Debian) | `curl -fsSL https://deb.nodesource.com/setup_22.x \| sudo bash - && sudo apt install -y nodejs` |
-| Linux (Fedora)        | `sudo dnf install -y nodejs`                                                                    |
-| Linux (Arch)          | `sudo pacman -S nodejs npm`                                                                     |
-
-**Install Git:**
-
-| Platform              | How to Install                                                                      |
-| --------------------- | ----------------------------------------------------------------------------------- |
-| Windows               | Download from [git-scm.com](https://git-scm.com/download/win) and run the installer |
-| macOS                 | `brew install git` or install Xcode Command Line Tools: `xcode-select --install`    |
-| Linux (Ubuntu/Debian) | `sudo apt install -y git`                                                           |
-| Linux (Fedora)        | `sudo dnf install -y git`                                                           |
-| Linux (Arch)          | `sudo pacman -S git`                                                                |
-
-Verify both are installed:
-
-```bash
-node -v        # should show v20 or higher
-git --version  # should show git version 2.x+
-```
-
-#### Quick Start
-
-**Windows:**
-
-```bat
-git clone https://github.com/Pasta-Devs/Marinara-Engine.git
-cd marinara-engine
-start.bat
-```
-
-**macOS / Linux:**
-
-```bash
-git clone https://github.com/Pasta-Devs/Marinara-Engine.git
-cd marinara-engine
-chmod +x start.sh
-./start.sh
-```
-
-**Android (Termux):**
-
-Install [Termux](https://f-droid.org/en/packages/com.termux/) from F-Droid (the Play Store version is outdated), then run:
-
-```bash
-pkg update && pkg install -y git nodejs-lts && git clone https://github.com/Pasta-Devs/Marinara-Engine.git && cd marinara-engine && chmod +x start-termux.sh && ./start-termux.sh
-```
-
-The Termux launcher downloads the prebuilt SQLite native module when available, installs dependencies, builds the app, and starts the server at `http://127.0.0.1:<PORT>` using the resolved `PORT` value from `.env` or the default `7860`. First run takes a few minutes on mobile. After that, run `./start-termux.sh` to start again.
-
-If you also want a dedicated Android app shell, see [android/README.md](android/README.md). The APK is a WebView wrapper around the Termux-served app; it does not replace the server.
-
-> **Tip:** Install the PWA from your browser's "Add to Home Screen" prompt for a more native feel.
-
-When started from a git checkout, the shell launchers will:
-
-1. **Auto-update** from Git if a `.git` folder is detected
-2. Check that Node.js and the repo-pinned pnpm version are installed
-3. Install all dependencies on first run
-4. Build the application
-5. Ensure the database schema is up to date
-6. Load `.env`, resolve the final local URL, start the server, and open `http://127.0.0.1:<PORT>` in your browser by default
-
-Set `AUTO_OPEN_BROWSER=false` in `.env` to skip the automatic browser launch. This applies to the shell launchers (`start.bat`, `start.sh`, and `start-termux.sh`) only. The Android wrapper uses its own WebView.
-
-Set `AUTO_CREATE_DEFAULT_CONNECTION=false` in `.env` to prevent Marinara from creating the built-in OpenRouter Free starter connection on startup. By default, it is only created when the database has no saved connections.
-
-#### Manual Setup
-
-```bash
-git clone https://github.com/Pasta-Devs/Marinara-Engine.git
-cd marinara-engine
-pnpm install
-pnpm build
-pnpm db:push
-pnpm start
-```
-
-Then open **<http://127.0.0.1:7860>**. Everything runs locally.
-
-Bare `pnpm start` binds to `127.0.0.1` by default. If you want LAN access without using a launcher, set `HOST=0.0.0.0` first.
-
-### Run via Container (Docker / Podman)
-
-#### Pre-built Image (Docker)
-
-```bash
-docker compose up -d
-```
-
-Then open **<http://127.0.0.1:7860>**.
-
-Data (SQLite database, uploads, fonts, default backgrounds) is stored in the named volume `marinara-data`. To inspect it:
-
-```bash
-docker volume inspect marinara-data
-```
-
-If you do not want the built-in OpenRouter Free starter connection to be created for new container data volumes, set `AUTO_CREATE_DEFAULT_CONNECTION=false` in your `.env` before running `docker compose up -d`.
-
-To pull the latest image and restart:
-
-```bash
-docker compose down && docker compose pull && docker compose up -d
-```
-
-#### Build from Source (Docker)
-
-If you prefer to build the image yourself:
-
-```bash
-git clone https://github.com/Pasta-Devs/Marinara-Engine.git
-cd Marinara-Engine
-docker build -t marinara-engine .
-docker run -d -p 7860:7860 -v marinara-data:/app/data marinara-engine
-```
-
-#### Podman
-
-Podman is a drop-in replacement for Docker with better security features. Rootless mode is supported out of the box — no daemon required.
-
-**Pre-built image:**
-
-```bash
-podman compose up -d
-```
-
-Or:
-
-```bash
-podman run -d -p 7860:7860 -v marinara-data:/app/data ghcr.io/pasta-devs/marinara-engine:latest
-```
-
-> **Note:** `podman compose` requires the [`podman-compose`](https://github.com/containers/podman-compose/) plugin. On most distributions you can install it with `sudo dnf install podman-compose` (Fedora), `sudo apt install podman-compose` (Debian/Ubuntu), or `pip install podman-compose`.
-
-### Updating
-
-Git-based installs update automatically. If you launch Marinara Engine via `start.sh`, `start.bat`, or `start-termux.sh` from a git checkout, the launcher:
-
-1. Pulls the latest code from GitHub with `git pull`
-2. Detects whether the checkout changed
-3. Reinstalls dependencies and rebuilds when needed
-4. Starts the app on the current version
-
-This includes installs created by the Windows installer, because the installer clones the repository and keeps the `.git` directory.
-
-In-app update checks use the newest GitHub `v*` tag and matching release metadata when available. If you use Docker, the app shows the pull command instead of updating automatically. Docker images are published from `v*` tags.
-
-#### In-App Update Check
-
-Go to **Settings → Advanced → Updates** and click **Check for Updates**. If a new version is available:
-
-- **Git installs** — Click **Apply Update** to pull, rebuild, and restart the server automatically.
-- **Docker** — The UI shows the command to run: `docker compose pull && docker compose up -d`.
-
-#### Manual Update
-
-If you use a git checkout without the shell launchers or the in-app updater:
-
-```bash
-git fetch origin main
-git merge --ff-only origin/main
-pnpm install
-pnpm build
-pnpm db:push
-```
-
-Then restart the server.
 
 ---
 
@@ -424,6 +253,7 @@ Copy `.env.example` to `.env` to customize:
 | `HOST`                           | `127.0.0.1` (`pnpm start`) / `0.0.0.0` (shell launchers) | Bind address                                                                                                                                                   |
 | `AUTO_OPEN_BROWSER`              | `true`                                                   | Whether the shell launchers auto-open the local app URL. Set to `false`, `0`, `no`, or `off` to disable. Does not apply to the Android WebView wrapper.        |
 | `AUTO_CREATE_DEFAULT_CONNECTION` | `true`                                                   | Whether Marinara auto-creates the built-in OpenRouter Free starter connection when no saved connections exist. Set to `false`, `0`, `no`, or `off` to disable. |
+| `TZ`                             | _(system default; containers are often `UTC`)_           | Optional IANA timezone used for time-based features like character schedules.                                                                                 |
 | `DATABASE_URL`                   | `file:./data/marinara-engine.db`                         | SQLite database path. Relative file paths resolve from `packages/server` for compatibility with existing local installs.                                       |
 | `ENCRYPTION_KEY`                 | _(empty)_                                                | AES key for API key encryption (generate with `openssl rand -hex 32`)                                                                                          |
 | `ADMIN_SECRET`                   | _(empty)_                                                | Optional shared secret for destructive admin endpoints such as `/api/admin/clear-all`                                                                          |
@@ -446,7 +276,7 @@ marinara-engine/
 │   └── shared/       # Shared types, schemas, constants, version data
 ├── android/          # Android WebView wrapper for the Termux-served app
 ├── installer/        # Windows installer sources and scripts
-├── docs/             # Screenshots and supporting docs assets
+├── docs/             # Screenshots and user documentation (installation + frontend)
 ├── start.bat         # Windows launcher
 ├── start.sh          # macOS/Linux launcher
 ├── start-termux.sh   # Termux launcher

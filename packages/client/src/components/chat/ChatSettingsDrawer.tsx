@@ -56,6 +56,7 @@ import {
   ROLEPLAY_PARAMETER_DEFAULTS,
 } from "../ui/GenerationParametersEditor";
 import { ChoiceSelectionModal } from "../presets/ChoiceSelectionModal";
+import { SummariesEditorModal } from "./SummariesEditorModal";
 import { useCharacters, useCharacterSprites, usePersonas, useCharacterGroups } from "../../hooks/use-characters";
 import { useLorebooks } from "../../hooks/use-lorebooks";
 import { usePresetFull, usePresets } from "../../hooks/use-presets";
@@ -444,6 +445,7 @@ export function ChatSettingsDrawer({
   const [showToolPicker, setShowToolPicker] = useState(false);
   const [showPersonaPicker, setShowPersonaPicker] = useState(false);
   const [showConnectionPicker, setShowConnectionPicker] = useState(false);
+  const [showSummariesModal, setShowSummariesModal] = useState(false);
   const [connectionSearch, setConnectionSearch] = useState("");
   const [personaSearch, setPersonaSearch] = useState("");
   const [pendingToolIds, setPendingToolIds] = useState<string[]>([]);
@@ -2621,34 +2623,54 @@ export function ChatSettingsDrawer({
             </Section>
           )}
 
-          {/* Discord Webhook */}
-          {
+          {/* Automatic Summarization — conversation mode only. Opens a modal to edit per-day and per-week summaries. */}
+          {isConversation && (
             <Section
-              label="Discord Mirror"
-              icon={<Globe size="0.875rem" />}
-              help="Mirror messages from this chat to a Discord channel via webhook. Character messages appear under the character's name, and Game mode system narration uses narrator-style labels where needed."
+              label="Automatic Summarization"
+              icon={<CalendarClock size="0.875rem" />}
+              help="To help keep the request context low, the conversation is automatically summarized. Each day is wrapped up into a day summary. Likewise, day summaries are combined into week summaries. Chat messages that have been summarized are not added to context. Only the week summaries, the day summaries of the current week and today's messages are added to the context. This feature currently can't be disabled."
             >
-              <div className="space-y-2">
-                <p className="text-[0.625rem] text-[var(--muted-foreground)]">
-                  Paste a Discord webhook URL to mirror this chat's messages to a channel. Character messages appear
-                  under their name, and game narration/party messages use simple speaker labels.
-                </p>
-                <input
-                  type="url"
-                  placeholder="https://discord.com/api/webhooks/..."
-                  value={(metadata.discordWebhookUrl as string) ?? ""}
-                  onChange={(e) => {
-                    updateMeta.mutate({ id: chat.id, discordWebhookUrl: e.target.value.trim() || undefined });
-                  }}
-                  className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2.5 text-[0.6875rem] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 ring-1 ring-transparent focus:ring-[var(--primary)]/40 focus:outline-none transition-all"
-                />
-                {metadata.discordWebhookUrl &&
-                  !/^https:\/\/discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(
-                    (metadata.discordWebhookUrl as string).trim(),
-                  ) && <p className="text-[0.625rem] text-red-400">Invalid webhook URL format</p>}
-              </div>
+              <button
+                onClick={() => setShowSummariesModal(true)}
+                className="flex w-full items-center justify-between rounded-lg bg-[var(--secondary)] px-3 py-2.5 text-left transition-all hover:bg-[var(--accent)]"
+              >
+                <div className="flex-1 min-w-0">
+                  <span className="text-[0.6875rem] font-medium">Edit Summaries</span>
+                  <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                    Review and edit what characters remember from this chat.
+                  </p>
+                </div>
+                <Pencil size="0.875rem" className="shrink-0 text-[var(--muted-foreground)]" />
+              </button>
             </Section>
-          }
+          )}
+
+          {/* Discord Webhook */}
+          <Section
+            label="Discord Mirror"
+            icon={<Globe size="0.875rem" />}
+            help="Mirror messages from this chat to a Discord channel via webhook. Character messages appear under the character's name, and Game mode system narration uses narrator-style labels where needed."
+          >
+            <div className="space-y-2">
+              <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                Paste a Discord webhook URL to mirror this chat's messages to a channel. Character messages appear under
+                their name, and game narration/party messages use simple speaker labels.
+              </p>
+              <input
+                type="url"
+                placeholder="https://discord.com/api/webhooks/..."
+                value={(metadata.discordWebhookUrl as string) ?? ""}
+                onChange={(e) => {
+                  updateMeta.mutate({ id: chat.id, discordWebhookUrl: e.target.value.trim() || undefined });
+                }}
+                className="w-full rounded-lg bg-[var(--secondary)] px-3 py-2.5 text-[0.6875rem] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)]/50 ring-1 ring-transparent focus:ring-[var(--primary)]/40 focus:outline-none transition-all"
+              />
+              {metadata.discordWebhookUrl &&
+                !/^https:\/\/discord(?:app)?\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(
+                  (metadata.discordWebhookUrl as string).trim(),
+                ) && <p className="text-[0.625rem] text-red-400">Invalid webhook URL format</p>}
+            </div>
+          </Section>
 
           {/* Function Calling — hidden for conversation mode */}
           {!isConversation && (
@@ -3124,6 +3146,9 @@ export function ChatSettingsDrawer({
         chatId={chat.id}
         existingChoices={metadata.presetChoices ?? {}}
       />
+
+      {/* Automatic summarization editor */}
+      <SummariesEditorModal chat={chat} open={showSummariesModal} onClose={() => setShowSummariesModal(false)} />
 
       {/* First message confirmation dialog */}
       {firstMesConfirm && (

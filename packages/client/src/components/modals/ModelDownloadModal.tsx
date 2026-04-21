@@ -140,7 +140,6 @@ export function ModelDownloadModal({ open, onClose }: Props) {
     listHuggingFaceModels,
     clearCustomModels,
     cancelDownload,
-    unloadModel,
     restartRuntime,
     installRuntime,
     sendTestMessage,
@@ -180,9 +179,9 @@ export function ModelDownloadModal({ open, onClose }: Props) {
   const hasModel = modelDownloaded;
   const activeModelName = hasModel ? modelDisplayName : null;
   const shouldAutoStart = config.useForTrackers || config.useForGameScene;
-  const isPreparingServer =
-    hasModel && shouldAutoStart && !inferenceReady && (status === "starting_server" || status === "downloaded");
-  const isSetupBusy = isDownloading || status === "downloading_runtime" || isPreparingServer;
+  const isBlockingSetup = isDownloading || status === "downloading_runtime";
+  const isPreparingServer = runtime.installed && hasModel && shouldAutoStart && !inferenceReady && status === "starting_server";
+  const showSetupProgress = isBlockingSetup || isPreparingServer;
   const canFinish = status === "ready" && inferenceReady;
   const runtimePreferenceOptions = getRuntimePreferenceOptions(platform, arch);
   const gpuLayersMode = gpuLayersModeDraft;
@@ -245,7 +244,7 @@ export function ModelDownloadModal({ open, onClose }: Props) {
         : `Downloading local runtime${progress.label ? ` (${progress.label})` : ""}...`
       : progress?.phase === "model"
         ? `Downloading model${progress.label ? ` (${progress.label})` : ""}...`
-        : isPreparingServer
+      : isPreparingServer
           ? "Starting local runtime..."
           : "Setting up local runtime...";
   const setupDescription =
@@ -258,12 +257,14 @@ export function ModelDownloadModal({ open, onClose }: Props) {
           ? "Downloading a private uv bootstrap and creating an isolated MLX environment inside Marinara's sidecar runtime folder."
           : "Downloading the official local runtime for this device."
         : activeBackend === "mlx"
-          ? "Starting the MLX server and populating Marinara's local model cache. The first run can take a few minutes."
-          : "Loading the model and starting the local sidecar server. This can take a few seconds.";
+          ? "Starting the MLX server in the background. You can close this window while Marinara finishes booting it."
+          : "Starting the local sidecar server in the background. You can close this window while Marinara finishes booting it.";
   const runtimeStatusLabel = canFinish
     ? "Ready"
-    : isSetupBusy
+    : isBlockingSetup
       ? "Setting up now"
+      : isPreparingServer
+        ? "Starting runtime"
       : status === "server_error"
         ? "Setup error"
         : runtime.installed
@@ -393,16 +394,11 @@ export function ModelDownloadModal({ open, onClose }: Props) {
     topKInput !== String(config.topK);
 
   const handleCancelSetup = () => {
-    if (isPreparingServer) {
-      void unloadModel();
-      return;
-    }
-
     void cancelDownload();
   };
 
   return (
-    <Modal open={open} onClose={isSetupBusy ? () => {} : onClose} title="Local AI Model" width="max-w-2xl">
+    <Modal open={open} onClose={onClose} title="Local AI Model" width="max-w-2xl">
       <div className="flex flex-col gap-5">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/10">
@@ -478,7 +474,7 @@ export function ModelDownloadModal({ open, onClose }: Props) {
             </button>
           </div>
 
-          {!isSetupBusy && (
+          {!showSetupProgress && (
             <div className="mt-3 flex flex-wrap gap-2">
               {!runtime.installed ? (
                 <button
@@ -838,7 +834,7 @@ export function ModelDownloadModal({ open, onClose }: Props) {
           )}
         </div>
 
-        {isSetupBusy && (
+        {showSetupProgress && (
           <div className="rounded-xl border border-purple-400/25 bg-purple-500/5 p-4">
             <div className="flex items-start gap-3">
               <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-purple-500/15">
@@ -878,7 +874,7 @@ export function ModelDownloadModal({ open, onClose }: Props) {
           </div>
         )}
 
-        {!isSetupBusy && (
+        {!isBlockingSetup && (
           <>
             <div className="flex flex-col gap-2">
               <span className="text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]/60">
@@ -1045,7 +1041,7 @@ export function ModelDownloadModal({ open, onClose }: Props) {
         )}
 
         <div className="flex items-center gap-2">
-          {isSetupBusy ? (
+          {isBlockingSetup ? (
             <button
               onClick={handleCancelSetup}
               className="flex w-full items-center justify-center gap-2 rounded-xl border border-[var(--border)] px-4 py-2.5 text-sm text-[var(--muted-foreground)] transition-colors hover:bg-[var(--secondary)]"
@@ -1072,7 +1068,7 @@ export function ModelDownloadModal({ open, onClose }: Props) {
           )}
         </div>
 
-        {!hasModel && !isSetupBusy && (
+        {!hasModel && !isBlockingSetup && (
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)]/50 p-3">
             <span className="text-xs font-medium uppercase tracking-wider text-[var(--muted-foreground)]/60">
               What the local model handles

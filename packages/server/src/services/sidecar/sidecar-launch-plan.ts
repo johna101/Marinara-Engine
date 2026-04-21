@@ -17,7 +17,6 @@ export function buildLlamaArgs(options: {
     "127.0.0.1",
     "--parallel",
     "2",
-    "--log-disable",
     "--ctx-size",
     String(options.contextSize),
     "--port",

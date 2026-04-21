@@ -11,7 +11,7 @@ set "INSTALL_ERROR="
 echo.
 echo  +==========================================+
 echo  ^|   Marinara Engine - Windows Installer     ^|
-echo  ^|   v1.5.3                                  ^|
+echo  ^|   v1.5.4                                  ^|
 
 echo  +==========================================+
 echo.

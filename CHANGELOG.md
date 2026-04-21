@@ -2,6 +2,37 @@
 
 This file is the release-notes source of truth for Marinara Engine. Reuse these entries when publishing GitHub Releases for tags in the `vX.Y.Z` format.
 
+## [1.5.4]
+
+### Added
+
+- An option to control when the Narrative Director triggers to prevent rushing.
+- Every time you add an agent to a chat, you now see a window with its description and setup.
+- Macros support for {{user}} and {{char}} in Game mode.
+- Added translation support to the Game mode.
+- You can now address the GM directly in the Game mode.
+- Refresh cache button in Advanced Settings.
+
+### Fixed
+
+- OpenAI endpoint now correctly re-routes all GPT-5.4 models via Responses API.
+- Strengthened the regex to catch incorrect formatting of the messages in Conversations mode.
+- Restored the slight delay on receiving multi-line messages in Conversations mode.
+- Fixed mobile side displays of dialogues in Game mode.
+- Game mode incorrect starting narration.
+- ComfyUI generation for sprites and default workflow fixes.
+- Removed a bugged new chat creation from Manage Chat Files.
+- Bold dialogue formatting now supports Chinese and Japanese quotation marks.
+- Strengthened commands in Conversations mode.
+- Various mobile UI fixes.
+- Scenes cannot be branched anymore (that broke them).
+- Sprite generation triggering on unsupported platforms.
+- Cross-awareness with game mode.
+- Clicking on new conversation notifications while in Game mode now takes you to the Conversations correctly.
+- All GLM models now correctly receive only the `enable_thinking` parameter with `false/true` depending on whether you chose reasoning to be `None` or any other.
+- Improved Lorebook Keeper agent.
+- QTE in Game mode fix.
+
 ## [1.5.3]
 
 ### Added

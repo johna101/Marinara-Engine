@@ -48,6 +48,7 @@ import { cn } from "../../lib/utils";
 import { showAlertDialog, showConfirmDialog, showPromptDialog } from "../../lib/app-dialogs";
 import { HelpTooltip } from "../ui/HelpTooltip";
 import { ExpandedTextarea } from "../ui/ExpandedTextarea";
+import { Modal } from "../ui/Modal";
 import {
   CHAT_PARAMETER_DEFAULTS,
   GenerationParametersFields,
@@ -61,6 +62,7 @@ import { useCharacters, useCharacterSprites, usePersonas, useCharacterGroups } f
 import { useLorebooks } from "../../hooks/use-lorebooks";
 import { usePresetFull, usePresets } from "../../hooks/use-presets";
 import { useConnections, useSaveConnectionDefaults } from "../../hooks/use-connections";
+import { useGenerate } from "../../hooks/use-generate";
 import {
   useUpdateChat,
   useUpdateChatMetadata,
@@ -81,9 +83,15 @@ import {
   useApplyChatPreset,
   useImportChatPreset,
 } from "../../hooks/use-chat-presets";
-import type { ChatMode, ChatPreset, ChatPresetSettings } from "@marinara-engine/shared";
-import { useAgentConfigs, type AgentConfigRow } from "../../hooks/use-agents";
-import { BUILT_IN_AGENTS, BUILT_IN_TOOLS } from "@marinara-engine/shared";
+import type { AgentPhase, ChatMode, ChatPreset, ChatPresetSettings } from "@marinara-engine/shared";
+import { useAgentConfigs, useCreateAgent, useUpdateAgent, type AgentConfigRow } from "../../hooks/use-agents";
+import { useAgentStore } from "../../stores/agent.store";
+import {
+  BUILT_IN_AGENTS,
+  BUILT_IN_TOOLS,
+  DEFAULT_AGENT_TOOLS,
+  getDefaultBuiltInAgentSettings,
+} from "@marinara-engine/shared";
 import type { Chat, CharacterGroup } from "@marinara-engine/shared";
 import { useCustomTools, type CustomToolRow } from "../../hooks/use-custom-tools";
 import { useHapticStatus, useHapticConnect, useHapticDisconnect, useHapticStartScan } from "../../hooks/use-haptic";
@@ -107,6 +115,88 @@ const HIDDEN_ROLEPLAY_AGENTS = new Set([
   "autonomous-messenger",
 ]);
 
+type AvailableAgent = {
+  id: string;
+  name: string;
+  description: string;
+  category: string;
+  phase: AgentPhase;
+  builtIn: boolean;
+};
+
+type AgentAddPreview = {
+  agent: AvailableAgent;
+  config: AgentConfigRow | null;
+  contextSize: number;
+  runInterval: number | null;
+};
+
+type AgentRunIntervalMeta = {
+  label: string;
+  unit: string;
+  help: string;
+  defaultValue: number;
+  max: number;
+};
+
+function parseAgentSettings(raw: unknown): Record<string, unknown> {
+  if (!raw) return {};
+  if (typeof raw === "string") {
+    try {
+      const parsed = JSON.parse(raw);
+      return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : {};
+    } catch {
+      return {};
+    }
+  }
+  return typeof raw === "object" ? (raw as Record<string, unknown>) : {};
+}
+
+function normalizePositiveInteger(value: unknown, fallback: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(1, Math.min(max, Math.trunc(value)));
+}
+
+function isEnabledFlag(value: unknown): boolean {
+  return value === true || value === "true" || value === "1";
+}
+
+function normalizeNonNegativeInteger(value: unknown, fallback: number, max: number): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return fallback;
+  return Math.max(0, Math.min(max, Math.trunc(value)));
+}
+
+function getAgentRunIntervalMeta(agentType: string): AgentRunIntervalMeta | null {
+  switch (agentType) {
+    case "director":
+      return {
+        label: "Run Interval",
+        unit: "assistant messages",
+        help: "How many assistant messages should pass before the Narrative Director jumps in again. Higher values make it less aggressive.",
+        defaultValue: 5,
+        max: 100,
+      };
+    case "lorebook-keeper":
+      return {
+        label: "Run Interval",
+        unit: "assistant messages",
+        help: "How many assistant messages should pass between Lorebook Keeper updates.",
+        defaultValue: 8,
+        max: 100,
+      };
+    case "chat-summary":
+      return {
+        label: "Triggers After",
+        unit: "user messages",
+        help: "How many user messages should pass before the Automated Chat Summary updates again.",
+        defaultValue: 5,
+        max: 200,
+      };
+    default:
+      return null;
+  }
+}
+
 export function ChatSettingsDrawer({
   chat,
   open,
@@ -119,9 +209,13 @@ export function ChatSettingsDrawer({
   const qc = useQueryClient();
   const updateChat = useUpdateChat();
   const updateMeta = useUpdateChatMetadata();
+  const updateAgentConfig = useUpdateAgent();
+  const createAgent = useCreateAgent();
   const createMessage = useCreateMessage(chat.id);
   const connectChat = useConnectChat();
   const disconnectChat = useDisconnectChat();
+  const { retryAgents } = useGenerate();
+  const agentProcessing = useAgentStore((s) => s.isProcessing);
 
   const { data: allCharacters } = useCharacters();
   const { data: characterGroups } = useCharacterGroups();
@@ -166,24 +260,59 @@ export function ChatSettingsDrawer({
   const spritePosition: "left" | "right" = metadata.spritePosition === "right" ? "right" : "left";
   const hasCustomSpritePlacements = Object.keys(normalizeSpritePlacements(metadata.spritePlacements)).length > 0;
 
+  const agentConfigsByType = useMemo(() => {
+    const map = new Map<string, AgentConfigRow>();
+    for (const config of (agentConfigs ?? []) as AgentConfigRow[]) {
+      map.set(config.type, config);
+    }
+    return map;
+  }, [agentConfigs]);
+
   // Build the available agent list: built-in + custom agents from DB
   // In roleplay mode, hide agents that are either automatic or handled internally.
   const availableAgents = useMemo(() => {
-    const agents: Array<{ id: string; name: string; description: string; category: string }> = [];
+    const agents: AvailableAgent[] = [];
     for (const a of BUILT_IN_AGENTS) {
       if (HIDDEN_ROLEPLAY_AGENTS.has(a.id)) continue;
-      agents.push({ id: a.id, name: a.name, description: a.description, category: a.category });
+      const existing = agentConfigsByType.get(a.id);
+      agents.push({
+        id: a.id,
+        name: existing?.name ?? a.name,
+        description: existing?.description ?? a.description,
+        category: a.category,
+        phase: a.phase,
+        builtIn: true,
+      });
     }
     // Custom agents from DB
     if (agentConfigs) {
       for (const c of agentConfigs as AgentConfigRow[]) {
         if (!BUILT_IN_AGENTS.some((b) => b.id === c.type)) {
-          agents.push({ id: c.type, name: c.name, description: c.description, category: "custom" });
+          agents.push({
+            id: c.type,
+            name: c.name,
+            description: c.description,
+            category: "custom",
+            phase: c.phase as AgentPhase,
+            builtIn: false,
+          });
         }
       }
     }
     return agents;
-  }, [agentConfigs]);
+  }, [agentConfigs, agentConfigsByType]);
+
+  const lorebookKeeperConfig = agentConfigsByType.get("lorebook-keeper") ?? null;
+  const lorebookKeeperEnabledByDefault = isEnabledFlag(lorebookKeeperConfig?.enabled);
+  const lorebookKeeperActive =
+    activeAgentIds.includes("lorebook-keeper") || (activeAgentIds.length === 0 && lorebookKeeperEnabledByDefault);
+  const lorebookKeeperTargetLorebookId =
+    typeof metadata.lorebookKeeperTargetLorebookId === "string" ? metadata.lorebookKeeperTargetLorebookId : "";
+  const lorebookKeeperReadBehindMessages = normalizeNonNegativeInteger(
+    metadata.lorebookKeeperReadBehindMessages,
+    0,
+    100,
+  );
 
   // Build the available tool list: built-in + custom tools from DB
   const availableTools = useMemo(() => {
@@ -394,6 +523,10 @@ export function ChatSettingsDrawer({
     }
   };
 
+  const handleLorebookKeeperBackfill = useCallback(async () => {
+    await retryAgents(chat.id, ["lorebook-keeper"], { lorebookKeeperBackfill: true });
+  }, [chat.id, retryAgents]);
+
   const toggleTool = (toolId: string) => {
     const current = [...activeToolIds];
     const idx = current.indexOf(toolId);
@@ -453,6 +586,8 @@ export function ChatSettingsDrawer({
   const [lbSearch, setLbSearch] = useState("");
   const [toolSearch, setToolSearch] = useState("");
   const [choiceModalPresetId, setChoiceModalPresetId] = useState<string | null>(null);
+  const [agentAddPreview, setAgentAddPreview] = useState<AgentAddPreview | null>(null);
+  const [addingAgentToChat, setAddingAgentToChat] = useState(false);
   const [scenePromptExpanded, setScenePromptExpanded] = useState(false);
   const [scenePromptDraft, setScenePromptDraft] = useState(metadata.sceneSystemPrompt ?? "");
   const [groupScenarioDraft, setGroupScenarioDraft] = useState((metadata.groupScenarioText as string) ?? "");
@@ -482,6 +617,82 @@ export function ChatSettingsDrawer({
   const [renamingPreset, setRenamingPreset] = useState(false);
   const [renamePresetVal, setRenamePresetVal] = useState("");
   const presetFileInputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setAgentAddPreview(null);
+      setAddingAgentToChat(false);
+    }
+  }, [open]);
+
+  const openAgentAddModal = (agent: AvailableAgent) => {
+    const config = agentConfigsByType.get(agent.id) ?? null;
+    const mergedSettings = {
+      ...getDefaultBuiltInAgentSettings(agent.id),
+      ...parseAgentSettings(config?.settings),
+    };
+    const intervalMeta = getAgentRunIntervalMeta(agent.id);
+    setAgentAddPreview({
+      agent,
+      config,
+      contextSize: normalizePositiveInteger(mergedSettings.contextSize, 5, 200),
+      runInterval: intervalMeta
+        ? normalizePositiveInteger(mergedSettings.runInterval, intervalMeta.defaultValue, intervalMeta.max)
+        : null,
+    });
+  };
+
+  const confirmAddAgent = async () => {
+    if (!agentAddPreview) return;
+
+    const { agent, config, contextSize, runInterval } = agentAddPreview;
+    const builtInMeta = BUILT_IN_AGENTS.find((entry) => entry.id === agent.id) ?? null;
+    const nextSettings: Record<string, unknown> = {
+      ...getDefaultBuiltInAgentSettings(agent.id),
+      ...parseAgentSettings(config?.settings),
+      contextSize,
+    };
+    const intervalMeta = getAgentRunIntervalMeta(agent.id);
+    if (intervalMeta && runInterval != null) {
+      nextSettings.runInterval = runInterval;
+    }
+    if (builtInMeta && !Array.isArray(nextSettings.enabledTools)) {
+      nextSettings.enabledTools = DEFAULT_AGENT_TOOLS[agent.id] ?? [];
+    }
+
+    setAddingAgentToChat(true);
+    try {
+      if (config) {
+        await updateAgentConfig.mutateAsync({ id: config.id, settings: nextSettings });
+      } else if (builtInMeta) {
+        await createAgent.mutateAsync({
+          type: builtInMeta.id,
+          name: agent.name,
+          description: agent.description,
+          phase: agent.phase,
+          enabled: builtInMeta.enabledByDefault,
+          connectionId: null,
+          promptTemplate: "",
+          settings: nextSettings,
+        });
+      }
+
+      await updateMeta.mutateAsync({
+        id: chat.id,
+        activeAgentIds: Array.from(new Set([...activeAgentIds, agent.id])),
+      });
+      setAgentAddPreview(null);
+    } catch (error) {
+      await showAlertDialog({
+        title: "Couldn’t Add Agent",
+        message: error instanceof Error ? error.message : "Failed to add the agent to this chat.",
+      });
+    } finally {
+      setAddingAgentToChat(false);
+    }
+  };
+
+  const agentAddIntervalMeta = agentAddPreview ? getAgentRunIntervalMeta(agentAddPreview.agent.id) : null;
 
   const snapshotCurrentPresetSettings = useCallback((): ChatPresetSettings => {
     return {
@@ -1890,12 +2101,12 @@ export function ChatSettingsDrawer({
             </Section>
           )}
 
-          {/* Connected Roleplay — conversation mode: link to a roleplay chat */}
+          {/* Connected Chat — conversation mode: link to a roleplay or game chat */}
           {isConversation && (
             <Section
-              label="Connected Roleplay"
+              label="Connected Chat"
               icon={<ArrowRightLeft size="0.875rem" />}
-              help="Link this conversation to a roleplay chat. OOC context flows between them — conversation characters can influence the roleplay, and roleplay characters can comment in the conversation."
+              help="Link this conversation to a roleplay or game chat. OOC context flows between them — conversation characters can influence the linked chat, and linked events can flow back into the conversation."
             >
               {chat.connectedChatId ? (
                 (() => {
@@ -1927,7 +2138,7 @@ export function ChatSettingsDrawer({
                   }}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[var(--border)] px-3 py-2 text-xs text-[var(--muted-foreground)] transition-colors hover:border-[var(--primary)]/40 hover:text-[var(--primary)]"
                 >
-                  <Plus size="0.75rem" /> Link to Roleplay
+                  <Plus size="0.75rem" /> Link to Roleplay or Game
                 </button>
               ) : (
                 <PickerDropdown
@@ -2212,6 +2423,88 @@ export function ChatSettingsDrawer({
                     : "If disabled, no agents (workspace default or per-chat) will run for this chat."}
                 </p>
 
+                {metadata.enableAgents && !isGame && (
+                  <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--secondary)]/70 p-3">
+                    <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 text-[0.6875rem] font-medium">
+                          <BookOpen size="0.75rem" className="text-[var(--primary)]" />
+                          <span>Lorebook Keeper</span>
+                        </div>
+                        <p className="mt-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                          Pick a chat-specific target lorebook and optionally keep Lorebook Keeper a few assistant
+                          replies behind the latest canon before it writes.
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleLorebookKeeperBackfill}
+                        disabled={agentProcessing || !lorebookKeeperActive}
+                        className={cn(
+                          "inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-[0.6875rem] font-medium transition-colors",
+                          agentProcessing || !lorebookKeeperActive
+                            ? "cursor-not-allowed bg-[var(--muted)] text-[var(--muted-foreground)]"
+                            : "bg-[var(--primary)]/10 text-[var(--primary)] hover:bg-[var(--primary)]/15",
+                        )}
+                      >
+                        <RefreshCw size="0.75rem" className={cn(agentProcessing && "animate-spin")} />
+                        <span>Backfill Unprocessed</span>
+                      </button>
+                    </div>
+
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                        <span className="font-medium text-[var(--foreground)]">Target Lorebook</span>
+                        <select
+                          value={lorebookKeeperTargetLorebookId}
+                          onChange={(e) =>
+                            updateMeta.mutate({
+                              id: chat.id,
+                              lorebookKeeperTargetLorebookId: e.target.value || null,
+                            })
+                          }
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)]"
+                        >
+                          <option value="">Auto-select first writable lorebook</option>
+                          {((lorebooks ?? []) as Array<{ id: string; name: string }>).map((lorebook) => (
+                            <option key={lorebook.id} value={lorebook.id}>
+                              {lorebook.name}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+
+                      <label className="flex min-w-0 flex-col gap-1 text-[0.625rem] text-[var(--muted-foreground)]">
+                        <span className="font-medium text-[var(--foreground)]">Read Behind</span>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          step={1}
+                          value={lorebookKeeperReadBehindMessages}
+                          onChange={(e) => {
+                            const nextValue = e.target.value === "" ? 0 : Number.parseInt(e.target.value, 10);
+                            updateMeta.mutate({
+                              id: chat.id,
+                              lorebookKeeperReadBehindMessages: Number.isFinite(nextValue)
+                                ? Math.max(0, Math.min(100, nextValue))
+                                : 0,
+                            });
+                          }}
+                          className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] px-2.5 py-2 text-xs text-[var(--foreground)]"
+                        />
+                      </label>
+                    </div>
+
+                    <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                      {lorebookKeeperActive
+                        ? "Read-behind uses assistant messages: 0 means the newest eligible reply, 1 waits one reply, and backfill only processes messages Lorebook Keeper has not already saved."
+                        : activeAgentIds.length === 0
+                          ? "Lorebook Keeper is not currently enabled in workspace defaults. These chat settings will apply once it is enabled."
+                          : "Lorebook Keeper is not in this chat's active agent list. Add it below to make these settings take effect."}
+                    </p>
+                  </div>
+                )}
+
                 {/* Manual trackers toggle — not for game mode */}
                 {metadata.enableAgents && !isGame && (
                   <button
@@ -2460,7 +2753,7 @@ export function ChatSettingsDrawer({
                                       <Sparkles size="0.875rem" className="text-[var(--primary)]" />
                                       <div className="flex-1 min-w-0">
                                         <span className="block truncate text-xs">{agent.name}</span>
-                                        <span className="block truncate text-[0.625rem] text-[var(--muted-foreground)]">
+                                        <span className="mt-0.5 block text-[0.625rem] leading-tight text-[var(--muted-foreground)] line-clamp-2">
                                           {agent.description}
                                         </span>
                                       </div>
@@ -2481,16 +2774,13 @@ export function ChatSettingsDrawer({
                                   {inactiveInCat.map((agent) => (
                                     <button
                                       key={agent.id}
-                                      onClick={() => {
-                                        const next = [...activeAgentIds, agent.id];
-                                        updateMeta.mutate({ id: chat.id, activeAgentIds: next });
-                                      }}
+                                      onClick={() => openAgentAddModal(agent)}
                                       className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)] bg-[var(--secondary)]"
                                     >
                                       <Plus size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
                                       <div className="flex-1 min-w-0">
                                         <span className="block truncate text-xs">{agent.name}</span>
-                                        <span className="block truncate text-[0.625rem] text-[var(--muted-foreground)]">
+                                        <span className="mt-0.5 block text-[0.625rem] leading-tight text-[var(--muted-foreground)] line-clamp-2">
                                           {agent.description}
                                         </span>
                                       </div>
@@ -2546,16 +2836,13 @@ export function ChatSettingsDrawer({
                                   {inactiveCustom.map((agent) => (
                                     <button
                                       key={agent.id}
-                                      onClick={() => {
-                                        const next = [...activeAgentIds, agent.id];
-                                        updateMeta.mutate({ id: chat.id, activeAgentIds: next });
-                                      }}
+                                      onClick={() => openAgentAddModal(agent)}
                                       className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-all hover:bg-[var(--accent)] bg-[var(--secondary)]"
                                     >
                                       <Plus size="0.75rem" className="shrink-0 text-[var(--muted-foreground)]" />
                                       <div className="flex-1 min-w-0">
                                         <span className="block truncate text-xs">{agent.name}</span>
-                                        <span className="block truncate text-[0.625rem] text-[var(--muted-foreground)]">
+                                        <span className="mt-0.5 block text-[0.625rem] leading-tight text-[var(--muted-foreground)] line-clamp-2">
                                           {agent.description}
                                         </span>
                                       </div>
@@ -2897,7 +3184,7 @@ export function ChatSettingsDrawer({
           <Section
             label="Translation"
             icon={<Languages size="0.875rem" />}
-            help="Translate messages on the fly. Click the translate icon on any message to translate it. Configure the provider and target language here."
+            help="Configure translation for this chat here, including provider, target language, and automatic response translation for Game mode."
           >
             <div className="space-y-3">
               {/* Provider */}
@@ -3149,6 +3436,121 @@ export function ChatSettingsDrawer({
 
       {/* Automatic summarization editor */}
       <SummariesEditorModal chat={chat} open={showSummariesModal} onClose={() => setShowSummariesModal(false)} />
+
+      <Modal
+        open={!!agentAddPreview}
+        onClose={() => {
+          if (!addingAgentToChat) setAgentAddPreview(null);
+        }}
+        title={agentAddPreview ? `Add ${agentAddPreview.agent.name}` : "Add Agent"}
+        width="max-w-lg"
+      >
+        {agentAddPreview && (
+          <div className="space-y-4">
+            <div className="rounded-xl bg-[var(--secondary)]/80 px-4 py-3 ring-1 ring-[var(--border)]">
+              <div className="flex items-start gap-3">
+                <Sparkles size="1rem" className="mt-0.5 shrink-0 text-[var(--primary)]" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-semibold text-[var(--foreground)]">{agentAddPreview.agent.name}</p>
+                    <span className="rounded-full bg-[var(--accent)] px-2 py-0.5 text-[0.5625rem] uppercase tracking-wide text-[var(--muted-foreground)]">
+                      {agentAddPreview.agent.builtIn ? agentAddPreview.agent.category : "custom"}
+                    </span>
+                  </div>
+                  <p className="mt-2 whitespace-pre-wrap text-xs leading-5 text-[var(--muted-foreground)]">
+                    {agentAddPreview.agent.description || "No description available."}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {agentAddPreview.agent.id !== "chat-summary" ? (
+              <div className="space-y-1.5">
+                <label className="block text-[0.6875rem] font-semibold text-[var(--foreground)]">Context Size</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    value={agentAddPreview.contextSize}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      setAgentAddPreview((current) =>
+                        current
+                          ? {
+                              ...current,
+                              contextSize: Number.isFinite(value) ? Math.max(1, Math.min(200, value)) : 5,
+                            }
+                          : current,
+                      );
+                    }}
+                    disabled={addingAgentToChat}
+                    className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">messages</span>
+                </div>
+                <p className="text-[0.625rem] text-[var(--muted-foreground)]">
+                  How many recent chat messages this agent should receive as working context.
+                </p>
+              </div>
+            ) : (
+              <div className="rounded-xl bg-[var(--accent)]/50 px-3 py-2.5 text-[0.6875rem] text-[var(--muted-foreground)] ring-1 ring-[var(--border)]">
+                Context size for automated summaries is managed in the Chat Summary panel after you add the agent.
+              </div>
+            )}
+
+            {agentAddIntervalMeta && agentAddPreview.runInterval != null && (
+              <div className="space-y-1.5">
+                <label className="block text-[0.6875rem] font-semibold text-[var(--foreground)]">
+                  {agentAddIntervalMeta.label}
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={1}
+                    max={agentAddIntervalMeta.max}
+                    value={agentAddPreview.runInterval}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value, 10);
+                      setAgentAddPreview((current) =>
+                        current
+                          ? {
+                              ...current,
+                              runInterval: Number.isFinite(value)
+                                ? Math.max(1, Math.min(agentAddIntervalMeta.max, value))
+                                : agentAddIntervalMeta.defaultValue,
+                            }
+                          : current,
+                      );
+                    }}
+                    disabled={addingAgentToChat}
+                    className="w-28 rounded-xl bg-[var(--secondary)] px-3 py-2.5 text-sm tabular-nums ring-1 ring-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60"
+                  />
+                  <span className="text-[0.6875rem] text-[var(--muted-foreground)]">{agentAddIntervalMeta.unit}</span>
+                </div>
+                <p className="text-[0.625rem] text-[var(--muted-foreground)]">{agentAddIntervalMeta.help}</p>
+              </div>
+            )}
+
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button
+                onClick={() => setAgentAddPreview(null)}
+                disabled={addingAgentToChat}
+                className="rounded-lg px-3 py-2 text-xs font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmAddAgent}
+                disabled={addingAgentToChat}
+                className="rounded-lg bg-[var(--primary)] px-3 py-2 text-xs font-semibold text-[var(--primary-foreground)] transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {addingAgentToChat ? "Adding..." : "Add"}
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
 
       {/* First message confirmation dialog */}
       {firstMesConfirm && (

@@ -43,6 +43,7 @@ import {
   useCharacterSprites,
   useUploadSprite,
   useDeleteSprite,
+  useSpriteCapabilities,
   spriteKeys,
   type SpriteInfo,
 } from "../../hooks/use-characters";
@@ -482,6 +483,7 @@ function PersonaSpritesTab({
   type SpriteCategory = "expressions" | "full-body";
 
   const { data: sprites, isLoading } = useCharacterSprites(personaId);
+  const { data: spriteCapabilities } = useSpriteCapabilities();
   const uploadSprite = useUploadSprite();
   const deleteSprite = useDeleteSprite();
   const queryClient = useQueryClient();
@@ -503,6 +505,8 @@ function PersonaSpritesTab({
     visibleSprites.map((s) => (category === "full-body" ? s.expression.replace(/^full_/, "") : s.expression)),
   );
   const suggestedExpressions = DEFAULT_EXPRESSIONS.filter((e) => !existingExpressions.has(e));
+  const spriteGenerationUnavailable = spriteCapabilities?.spriteGenerationAvailable === false;
+  const spriteGenerationReason = spriteCapabilities?.reason ?? "Sprite generation is unavailable on this platform.";
 
   const normalizeExpressionForCategory = (raw: string) => {
     const cleaned = raw
@@ -691,8 +695,11 @@ function PersonaSpritesTab({
           <div className="flex items-center gap-2">
             <button
               onClick={() => setSpriteGenOpen(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-purple-500/10 px-3 py-1.5 text-[0.6875rem] font-medium text-purple-400 ring-1 ring-purple-500/20 transition-all hover:bg-purple-500/20"
-              title="Generate sprites using AI image generation"
+              disabled={spriteGenerationUnavailable}
+              className="flex items-center gap-1.5 rounded-lg bg-purple-500/10 px-3 py-1.5 text-[0.6875rem] font-medium text-purple-400 ring-1 ring-purple-500/20 transition-all hover:bg-purple-500/20 disabled:cursor-not-allowed disabled:opacity-40"
+              title={
+                spriteGenerationUnavailable ? spriteGenerationReason : "Generate sprites using AI image generation"
+              }
             >
               <Wand2 size="0.8125rem" />
               Generate Sprite
@@ -731,6 +738,11 @@ function PersonaSpritesTab({
           <div className="flex items-center gap-2 rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
             <Loader2 size="0.75rem" className="animate-spin text-[var(--primary)]" />
             Uploading {folderProgress.done}/{folderProgress.total} sprites…
+          </div>
+        )}
+        {spriteGenerationUnavailable && (
+          <div className="rounded-lg bg-[var(--secondary)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
+            {spriteGenerationReason}
           </div>
         )}
         <div className="flex gap-2">
@@ -966,7 +978,7 @@ function PersonaColorsTab({
         onChange={(v) => updateField("dialogueColor", v)}
         label="Dialogue Highlight Color"
         helpText={
-          'Text inside quotation marks ("", \u201c\u201d, \u00ab\u00bb) will be automatically colored with this, and can also be bolded from Settings.'
+          'Text inside dialogue quotation marks ("", “”, «», 「」, 『』) will be automatically colored with this, and can also be bolded from Settings.'
         }
       />
 
@@ -986,8 +998,8 @@ function PersonaColorsTab({
             display name in chat. Gradients use CSS linear-gradient.
           </li>
           <li>
-            &bull; <strong className="text-[var(--foreground)]">Dialogue color</strong> — All text inside double quotes
-            is automatically colored with this value, and can optionally be bolded from Settings.
+            &bull; <strong className="text-[var(--foreground)]">Dialogue color</strong> — All text inside dialogue
+            quotation marks is automatically colored with this value, and can optionally be bolded from Settings.
           </li>
           <li>
             &bull; <strong className="text-[var(--foreground)]">Box color</strong> — Sets the background color of your

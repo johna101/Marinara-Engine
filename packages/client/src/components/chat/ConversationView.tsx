@@ -250,7 +250,7 @@ export function ConversationView({
   // Strip leaked timestamps like [16:08] or [18.03.2026] from assistant content.
   const stripTimestamps = (text: string) =>
     text
-      .replace(/^(\s*\[\d{1,2}[:.:]\d{2}\]\s*)+/gm, "")
+      .replace(/^(\s*\[\d{1,2}[:.]\d{2}\]\s*)+/gm, "")
       .replace(/^(\s*\[\d{1,2}\.\d{1,2}\.\d{4}\]\s*)+/gm, "")
       .trim();
 
@@ -379,6 +379,9 @@ export function ConversationView({
   // component remounts. This prevents sounds/stagger replaying when the user
   // navigates away and comes back to the same chat.
   const globalSeenKeysRef = useRef(globalSeenKeys);
+  // Persist stagger timers in a ref so they survive effect re-runs caused by
+  // query refetches arriving shortly after the initial message_saved upsert.
+  const staggerTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
 
   // Reset stagger state when the active chat changes so no cross-chat leakage
   const prevChatIdRef = useRef(chatId);
@@ -386,6 +389,8 @@ export function ConversationView({
     prevChatIdRef.current = chatId;
     initialLoadSettledRef.current = false;
     prevRenderedKeysRef.current = new Set();
+    staggerTimersRef.current.forEach(clearTimeout);
+    staggerTimersRef.current = [];
     setHiddenLineKeys(new Set());
   }
 
@@ -436,10 +441,10 @@ export function ConversationView({
           continue;
         }
 
-        if (/__line[1-9]\d*$/.test(key)) {
+        if (/__block[1-9]\d*$/.test(key)) {
           newSplitChildren.push(key);
-        } else if (/__line0$/.test(key)) {
-          // First line of a split message — counts as new assistant message
+        } else if (/__block0$/.test(key)) {
+          // First block of a split message — counts as new assistant message
           hasNewAssistantMessage = true;
         } else {
           // Check if it's a new assistant message (not a split)
@@ -463,9 +468,17 @@ export function ConversationView({
     if (newSplitChildren.length === 0) {
       // Clear any orphaned hidden keys left by a previous stagger whose
       // reveal timers were cancelled (e.g. by a query refetch mid-stagger).
-      setHiddenLineKeys((prev) => (prev.size > 0 ? new Set() : prev));
+      // But only if no stagger is actively running — otherwise the refetch
+      // would wipe the hidden keys and show everything instantly.
+      if (staggerTimersRef.current.length === 0) {
+        setHiddenLineKeys((prev) => (prev.size > 0 ? new Set() : prev));
+      }
       return;
     }
+
+    // Cancel any previous stagger before starting a new one
+    staggerTimersRef.current.forEach(clearTimeout);
+    staggerTimersRef.current = [];
 
     // Hide all new split children initially
     setHiddenLineKeys((prev) => {
@@ -475,10 +488,9 @@ export function ConversationView({
     });
 
     // Reveal each one with a staggered delay (1.5s between each)
-    const timers: ReturnType<typeof setTimeout>[] = [];
     newSplitChildren.forEach((key, idx) => {
       const delay = (idx + 1) * 1500;
-      timers.push(
+      staggerTimersRef.current.push(
         setTimeout(() => {
           setHiddenLineKeys((prev) => {
             const next = new Set(prev);
@@ -489,12 +501,25 @@ export function ConversationView({
           if (useUIStore.getState().convoNotificationSound) {
             playNotificationPing();
           }
+          // Remove completed timer from the ref
+          if (idx === newSplitChildren.length - 1) {
+            staggerTimersRef.current = [];
+          }
         }, delay),
       );
     });
-
-    return () => timers.forEach(clearTimeout);
+    // No cleanup return here — timers are managed via staggerTimersRef and
+    // must survive effect re-runs caused by query refetches. Cleanup on
+    // unmount is handled by a separate effect below.
   }, [renderedItems]);
+
+  // Clean up stagger timers on unmount only (empty deps = unmount cleanup)
+  useEffect(() => {
+    return () => {
+      staggerTimersRef.current.forEach(clearTimeout);
+      staggerTimersRef.current = [];
+    };
+  }, []);
 
   // Auto-scroll when staggered lines are revealed
   const hiddenCount = hiddenLineKeys.size;

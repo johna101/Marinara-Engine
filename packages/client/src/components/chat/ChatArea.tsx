@@ -1025,6 +1025,7 @@ export function ChatArea() {
   const connectedChatName = chat?.connectedChatId
     ? chatList.find((item) => item.id === chat.connectedChatId)?.name
     : undefined;
+  const isSceneChat = chatMeta.sceneStatus === "active" || Boolean(chatMeta.sceneOriginChatId);
   const conversationSceneInfo =
     chatMeta.activeSceneChatId && chatList.some((item) => item.id === chatMeta.activeSceneChatId)
       ? { variant: "origin" as const, sceneChatId: chatMeta.activeSceneChatId }
@@ -1270,7 +1271,7 @@ export function ChatArea() {
           onSetActiveSwipe={handleSetActiveSwipe}
           onToggleConversationStart={handleToggleConversationStart}
           onPeekPrompt={handlePeekPrompt}
-          onBranch={handleBranch}
+          onBranch={isSceneChat ? undefined : handleBranch}
           onToggleSelectMessage={handleToggleSelectMessage}
           onSummaryContextSizeChange={handleSummaryContextSizeChange}
           onRerunTrackers={handleRerunTrackers}

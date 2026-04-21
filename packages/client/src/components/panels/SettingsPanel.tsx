@@ -374,7 +374,7 @@ function GeneralSettings() {
         checked={boldDialogue ?? true}
         onChange={setBoldDialogue}
         help={
-          'When on, text inside quotation marks ("like this") is bolded in addition to its dialogue highlight color. Turn it off to keep the color without bold.'
+          'When on, text inside dialogue quotation marks ("like this", 「like this」, or 『like this』) is bolded in addition to its dialogue highlight color. Turn it off to keep the color without bold.'
         }
       />
 

@@ -1,8 +1,8 @@
 // ──────────────────────────────────────────────
 // Game: Input Bar (send message, roll dice, attach files, emoji)
 // ──────────────────────────────────────────────
-import { useState, useRef, useCallback, type KeyboardEvent } from "react";
-import { Send, Dices, Paperclip, Smile, Users } from "lucide-react";
+import { useState, useRef, useEffect, useCallback, type KeyboardEvent } from "react";
+import { Send, Dices, Paperclip, Smile, Users, MessageCircle, MessageSquare } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { EmojiPicker } from "../ui/EmojiPicker";
 import { useUIStore } from "../../stores/ui.store";
@@ -13,6 +13,8 @@ interface Attachment {
   name: string;
 }
 
+type AddressMode = "scene" | "party" | "gm";
+
 interface GameInputProps {
   onSend: (
     message: string,
@@ -20,8 +22,8 @@ interface GameInputProps {
     options?: { commitPendingMove?: boolean },
   ) => void;
   onRollDice: (notation: string) => void;
-  /** When true, show the "Talk to party" toggle (prepends [To the party] to the sent message). */
-  showPartyToggle?: boolean;
+  /** When true, allow "Talk to Party" in the address selector. */
+  hasPartyMembers?: boolean;
   /** Pending staged destination from the map UI. */
   pendingMoveLabel?: string | null;
   /** Clear the staged destination without sending it. */
@@ -39,7 +41,7 @@ const QUICK_DICE = ["d20", "d6", "2d6", "d10", "d100", "d4", "d8", "d12"];
 export function GameInput({
   onSend,
   onRollDice,
-  showPartyToggle,
+  hasPartyMembers,
   pendingMoveLabel,
   onClearPendingMove,
   disabled,
@@ -62,11 +64,31 @@ export function GameInput({
   const [queuedDice, setQueuedDice] = useState<string | null>(null);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [partyMode, setPartyMode] = useState(false);
+  const [addressMode, setAddressMode] = useState<AddressMode>("scene");
+  const [addressMenuOpen, setAddressMenuOpen] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const emojiButtonRef = useRef<HTMLButtonElement>(null);
   const inputBarRef = useRef<HTMLDivElement>(null);
+  const addressButtonRef = useRef<HTMLButtonElement>(null);
+  const addressMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (addressMode !== "party" || hasPartyMembers) return;
+    setAddressMode("scene");
+  }, [addressMode, hasPartyMembers]);
+
+  useEffect(() => {
+    if (!addressMenuOpen) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target as Node | null;
+      if (!target) return;
+      if (addressButtonRef.current?.contains(target) || addressMenuRef.current?.contains(target)) return;
+      setAddressMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    return () => document.removeEventListener("pointerdown", handlePointerDown);
+  }, [addressMenuOpen]);
 
   /** Update text state and persist draft */
   const updateText = useCallback(
@@ -94,9 +116,15 @@ export function GameInput({
     }
   }, [storageKey]);
 
+  const handleAddressModeSelect = useCallback((nextMode: Exclude<AddressMode, "scene">) => {
+    setAddressMode((current) => (current === nextMode ? "scene" : nextMode));
+    setAddressMenuOpen(false);
+    inputRef.current?.focus();
+  }, []);
+
   const handleSend = () => {
     const trimmed = text.trim();
-    const commitPendingMove = !!pendingMoveLabel && !partyMode;
+    const commitPendingMove = !!pendingMoveLabel && addressMode === "scene";
     const hasTurnContent = trimmed.length > 0 || attachments.length > 0 || commitPendingMove || !!queuedDice;
     if (!hasTurnContent || disabled) return;
 
@@ -114,10 +142,10 @@ export function GameInput({
       setQueuedDice(null);
     }
 
-    // Party consultation mode — prepend [To the party] so the GM knows this turn
-    // is party discussion and should not progress the narrative.
-    if (partyMode) {
+    if (addressMode === "party") {
       body = body ? `[To the party] ${body}` : "[To the party]";
+    } else if (addressMode === "gm") {
+      body = body ? `[To the GM] ${body}` : "[To the GM]";
     }
 
     onSend(body, pendingAttachments, { commitPendingMove });
@@ -261,22 +289,68 @@ export function GameInput({
       )}
 
       {/* Main input */}
-      <div ref={inputBarRef} className={cn("flex items-center gap-1.5", inline ? "px-0 py-1" : "px-4 py-3")}>
-        {/* Left: Party toggle + Attach files */}
-        {showPartyToggle && (
+      <div ref={inputBarRef} className={cn("relative flex items-center gap-1.5", inline ? "px-0 py-1" : "px-4 py-3")}>
+        {/* Left: Address selector + Attach files */}
+        <div className="relative shrink-0">
+          {addressMenuOpen && (
+            <div
+              ref={addressMenuRef}
+              className="absolute bottom-full left-0 z-20 mb-2 flex min-w-[11rem] flex-col gap-1 rounded-xl border border-[var(--border)] bg-[var(--card)]/95 p-1.5 shadow-lg backdrop-blur"
+            >
+              {hasPartyMembers && (
+                <button
+                  onClick={() => handleAddressModeSelect("party")}
+                  className={cn(
+                    "flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors",
+                    addressMode === "party"
+                      ? "bg-sky-500/15 text-sky-200"
+                      : "text-[var(--foreground)]/75 hover:bg-white/5 hover:text-[var(--foreground)]",
+                  )}
+                >
+                  <Users size={14} className="shrink-0" />
+                  <span className="flex-1">Talk to Party</span>
+                  {addressMode === "party" && <span className="text-[0.625rem] uppercase tracking-wide">On</span>}
+                </button>
+              )}
+              <button
+                onClick={() => handleAddressModeSelect("gm")}
+                className={cn(
+                  "flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-xs transition-colors",
+                  addressMode === "gm"
+                    ? "bg-amber-500/15 text-amber-200"
+                    : "text-[var(--foreground)]/75 hover:bg-white/5 hover:text-[var(--foreground)]",
+                )}
+              >
+                <MessageCircle size={14} className="shrink-0" />
+                <span className="flex-1">Talk to GM</span>
+                {addressMode === "gm" && <span className="text-[0.625rem] uppercase tracking-wide">On</span>}
+              </button>
+            </div>
+          )}
           <button
-            onClick={() => setPartyMode((v) => !v)}
+            ref={addressButtonRef}
+            onClick={() => setAddressMenuOpen((open) => !open)}
             className={cn(
               "shrink-0 rounded-lg p-1.5 transition-all active:scale-90",
-              partyMode
+              addressMode === "party"
                 ? "text-sky-400 hover:bg-foreground/10"
-                : "text-foreground/40 hover:bg-foreground/10 hover:text-foreground/70",
+                : addressMode === "gm"
+                  ? "text-amber-300 hover:bg-foreground/10"
+                  : "text-foreground/40 hover:bg-foreground/10 hover:text-foreground/70",
             )}
-            title={partyMode ? "Switch to game actions" : "Talk to the party"}
+            title={
+              addressMode === "party"
+                ? "Choose who to address (currently Party)"
+                : addressMode === "gm"
+                  ? "Choose who to address (currently GM)"
+                  : "Choose who to address"
+            }
+            aria-haspopup="menu"
+            aria-expanded={addressMenuOpen}
           >
-            <Users size={18} />
+            <MessageSquare size={18} />
           </button>
-        )}
+        </div>
 
         <input
           ref={fileInputRef}
@@ -313,11 +387,13 @@ export function GameInput({
           placeholder={
             isStreaming
               ? "Waiting for the Game Master..."
-              : partyMode
+              : addressMode === "party"
                 ? "Say to party..."
-                : pendingMoveLabel
-                  ? "What do you do when you arrive?"
-                  : "What do you do?"
+                : addressMode === "gm"
+                  ? "Say to GM..."
+                  : pendingMoveLabel
+                    ? "What do you do when you arrive?"
+                    : "What do you do?"
           }
           disabled={disabled}
           rows={1}
@@ -378,11 +454,13 @@ export function GameInput({
         <button
           onClick={handleSend}
           disabled={
-            disabled || (!text.trim() && attachments.length === 0 && !(pendingMoveLabel && !partyMode) && !queuedDice)
+            disabled ||
+            (!text.trim() && attachments.length === 0 && !(pendingMoveLabel && addressMode === "scene") && !queuedDice)
           }
           className={cn(
             "flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-all duration-200 active:scale-90",
-            (text.trim() || attachments.length > 0 || (pendingMoveLabel && !partyMode) || queuedDice) && !disabled
+            (text.trim() || attachments.length > 0 || (pendingMoveLabel && addressMode === "scene") || queuedDice) &&
+              !disabled
               ? "text-white hover:text-white/80"
               : "text-white/30",
           )}

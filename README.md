@@ -75,7 +75,7 @@
 
 ## Latest Release
 
-Current stable release: **[v1.5.3](https://github.com/Pasta-Devs/Marinara-Engine/releases/tag/v1.5.3)**.
+Current stable release: **[v1.5.4](https://github.com/Pasta-Devs/Marinara-Engine/releases/tag/v1.5.4)**.
 
 Detailed release notes now live in [CHANGELOG.md](CHANGELOG.md). Tagged releases use the `vX.Y.Z` format, and GitHub Releases remain the publication mechanism for installers, release notes, and update metadata.
 
@@ -109,7 +109,7 @@ Each guide covers installation and updating for that platform.
 
 ### Windows Installer
 
-Download **[Marinara-Engine-Installer-1.5.3.exe](https://github.com/Pasta-Devs/Marinara-Engine/releases/download/v1.5.3/Marinara-Engine-Installer-1.5.3.exe)** from the [Releases](https://github.com/Pasta-Devs/Marinara-Engine/releases) page and run it. The installer lets you choose the install folder, checks for Node.js and Git, aligns pnpm to the repo-pinned version even if an older global pnpm is already installed, clones the repo, installs dependencies, builds the app, and creates desktop and Start Menu shortcuts with the Marinara icon.
+Download **[Marinara-Engine-Installer-1.5.4.exe](https://github.com/Pasta-Devs/Marinara-Engine/releases/download/v1.5.4/Marinara-Engine-Installer-1.5.4.exe)** from the [Releases](https://github.com/Pasta-Devs/Marinara-Engine/releases) page and run it. The installer lets you choose the install folder, checks for Node.js and Git, aligns pnpm to the repo-pinned version even if an older global pnpm is already installed, clones the repo, installs dependencies, builds the app, and creates desktop and Start Menu shortcuts with the Marinara icon.
 
 ---
 
@@ -253,7 +253,7 @@ Copy `.env.example` to `.env` to customize:
 | `HOST`                           | `127.0.0.1` (`pnpm start`) / `0.0.0.0` (shell launchers) | Bind address                                                                                                                                                   |
 | `AUTO_OPEN_BROWSER`              | `true`                                                   | Whether the shell launchers auto-open the local app URL. Set to `false`, `0`, `no`, or `off` to disable. Does not apply to the Android WebView wrapper.        |
 | `AUTO_CREATE_DEFAULT_CONNECTION` | `true`                                                   | Whether Marinara auto-creates the built-in OpenRouter Free starter connection when no saved connections exist. Set to `false`, `0`, `no`, or `off` to disable. |
-| `TZ`                             | _(system default; containers are often `UTC`)_           | Optional IANA timezone used for time-based features like character schedules.                                                                                 |
+| `TZ`                             | _(system default; containers are often `UTC`)_           | Optional IANA timezone used for time-based features like character schedules.                                                                                  |
 | `DATABASE_URL`                   | `file:./data/marinara-engine.db`                         | SQLite database path. Relative file paths resolve from `packages/server` for compatibility with existing local installs.                                       |
 | `ENCRYPTION_KEY`                 | _(empty)_                                                | AES key for API key encryption (generate with `openssl rand -hex 32`)                                                                                          |
 | `ADMIN_SECRET`                   | _(empty)_                                                | Optional shared secret for destructive admin endpoints such as `/api/admin/clear-all`                                                                          |
@@ -339,6 +339,8 @@ Look for `marinara-engine.db` plus any `-wal` and `-shm` companion files. The se
 - [Munimunigamer](https://github.com/munimunigamer)
 - [John](https://github.com/guybrush01)
 - [Pwildani](https://github.com/pwildani)
+- [Romu](https://github.com/Romuromylus)
+- [Felor](https://github.com/felorhik)
 
 ---
 

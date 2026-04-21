@@ -2,10 +2,10 @@
 // Chat: Manage Chat Files — switch between branches
 // Like SillyTavern's "Manage chat files" feature
 // ──────────────────────────────────────────────
-import { X, Plus, Trash2, FileText, MessageSquare, Download } from "lucide-react";
+import { X, Trash2, FileText, MessageSquare, Download } from "lucide-react";
 import { showConfirmDialog } from "../../lib/app-dialogs";
 import { cn } from "../../lib/utils";
-import { useChatGroup, useCreateChat, useDeleteChat, useDeleteChatGroup, useExportChat } from "../../hooks/use-chats";
+import { useChatGroup, useDeleteChat, useDeleteChatGroup, useExportChat } from "../../hooks/use-chats";
 import { useChatStore } from "../../stores/chat.store";
 import type { Chat } from "@marinara-engine/shared";
 
@@ -18,7 +18,6 @@ interface ChatFilesDrawerProps {
 export function ChatFilesDrawer({ chat, open, onClose }: ChatFilesDrawerProps) {
   const groupId = (chat as any).groupId as string | null;
   const { data: groupChats } = useChatGroup(groupId);
-  const createChat = useCreateChat();
   const deleteChat = useDeleteChat();
   const deleteChatGroup = useDeleteChatGroup();
   const exportChat = useExportChat();
@@ -26,27 +25,6 @@ export function ChatFilesDrawer({ chat, open, onClose }: ChatFilesDrawerProps) {
   const activeChatId = useChatStore((s) => s.activeChatId);
 
   const chatFiles = (groupChats ?? []) as Chat[];
-
-  const handleNewBranch = () => {
-    if (!groupId) return;
-    const charIds = typeof chat.characterIds === "string" ? JSON.parse(chat.characterIds) : (chat.characterIds ?? []);
-    createChat.mutate(
-      {
-        name: chat.name,
-        mode: chat.mode,
-        characterIds: charIds,
-        groupId,
-        connectionId: (chat as any).connectionId ?? null,
-        personaId: (chat as any).personaId ?? null,
-        promptPresetId: (chat as any).promptPresetId ?? null,
-      },
-      {
-        onSuccess: (newChat) => {
-          setActiveChatId(newChat.id);
-        },
-      },
-    );
-  };
 
   const handleSwitch = (chatId: string) => {
     setActiveChatId(chatId);
@@ -141,17 +119,9 @@ export function ChatFilesDrawer({ chat, open, onClose }: ChatFilesDrawerProps) {
           </button>
         </div>
 
-        {/* New branch button */}
+        {/* Export tools */}
         <div className="border-b border-[var(--border)] px-4 py-3">
-          <button
-            onClick={handleNewBranch}
-            disabled={createChat.isPending}
-            className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-sky-400 to-blue-500 px-3 py-2.5 text-xs font-medium text-white shadow-md shadow-sky-400/15 transition-all hover:shadow-lg hover:shadow-sky-400/25 active:scale-[0.98] disabled:opacity-50"
-          >
-            <Plus size="0.8125rem" />
-            Start New Chat
-          </button>
-          <p className="mt-1.5 mb-1.5 text-[0.625rem] font-medium uppercase tracking-wider text-[var(--muted-foreground)]/60">
+          <p className="mb-1.5 text-[0.625rem] font-medium uppercase tracking-wider text-[var(--muted-foreground)]/60">
             Export Chat
           </p>
           <div className="flex gap-2">

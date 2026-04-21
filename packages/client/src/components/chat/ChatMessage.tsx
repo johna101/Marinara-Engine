@@ -31,6 +31,7 @@ import { useApplyRegex } from "../../hooks/use-apply-regex";
 import { useUIStore } from "../../stores/ui.store";
 import { useTranslate } from "../../hooks/use-translate";
 import { api } from "../../lib/api-client";
+import { DIALOGUE_QUOTE_PATTERN_SOURCE, HTML_SAFE_DIALOGUE_QUOTE_PATTERN_SOURCE } from "../../lib/dialogue-quotes";
 import DOMPurify from "dompurify";
 import type { MessageSelectionToggle } from "./chat-area.types";
 
@@ -190,7 +191,8 @@ function renderWithSpeakerTags(
 }
 
 /**
- * Highlight quoted dialogue — text in "" or «» gets bold + colored.
+ * Highlight quoted dialogue — text in supported dialogue quote pairs
+ * like "", «», 「」, and 『』 gets bold + colored.
  *
  * Single quotes ('') are intentionally excluded because after curly-quote
  * normalization (' → ') they are indistinguishable from apostrophes,
@@ -216,7 +218,7 @@ function highlightDialogue(text: string, dialogueColor?: string, boldDialogue = 
   const isProtected = (pos: number) => protectedRanges.some(([s, e]) => pos >= s && pos < e);
 
   // Step 2: Find quote pairs, skipping any that start inside a protected zone.
-  const quoteRe = /(?:"([^"]+)"|«([^»]+)»)/g;
+  const quoteRe = new RegExp(`(?:${DIALOGUE_QUOTE_PATTERN_SOURCE})`, "g");
   const quotePairs: Array<{ start: number; end: number }> = [];
   let qm: RegExpExecArray | null;
   while ((qm = quoteRe.exec(text)) !== null) {
@@ -367,14 +369,16 @@ function renderContent(
       /<span[^>]*\bdata-spk="([^"]*)"[^>]*>([\s\S]*?)<\/span>/g,
       (_m: string, color: string, content: string) => {
         const validColor = safeColor(color);
-        return content.replace(/(?<![=\w])"([^"<>]+)"/g, (match: string, inner: string, offset: number) => {
+        const speakerQuoteRe = new RegExp(`(?<![=\\w])(?:${HTML_SAFE_DIALOGUE_QUOTE_PATTERN_SOURCE})`, "g");
+        return content.replace(speakerQuoteRe, (match: string, offset: number) => {
           if (insideTag(content, offset)) return match;
-          return `<${dialogueTag} style="color:${validColor}">"${inner}"</${dialogueTag}>`;
+          return `<${dialogueTag} style="color:${validColor}">${match}</${dialogueTag}>`;
         });
       },
     );
     // Pass 2: color remaining quotes with default dialogue color, skipping already-wrapped text
-    return afterSpeaker.replace(/(?<![=\w])"([^"<>]+)"/g, (match, inner, offset) => {
+    const remainingQuoteRe = new RegExp(`(?<![=\\w])(?:${HTML_SAFE_DIALOGUE_QUOTE_PATTERN_SOURCE})`, "g");
+    return afterSpeaker.replace(remainingQuoteRe, (match, offset) => {
       if (insideTag(afterSpeaker, offset)) return match;
       const before = afterSpeaker.slice(0, offset);
       if (/<(?:strong|span)[^>]*>\s*$/.test(before.slice(Math.max(0, before.length - 300)))) return match;
@@ -385,7 +389,7 @@ function renderContent(
         if (lastFontClose < lastFontOpen) return match;
       }
       const highlightColor = dialogueColor ?? "white";
-      return `<${dialogueTag} style="color:${highlightColor}">"${inner}"</${dialogueTag}>`;
+      return `<${dialogueTag} style="color:${highlightColor}">${match}</${dialogueTag}>`;
     });
   })();
 
@@ -1307,12 +1311,14 @@ export const ChatMessage = memo(function ChatMessage({
                   dark
                 />
               )}
-              <ActionBtn
-                icon={<GitBranch size="0.6875rem" />}
-                onClick={() => onBranch?.(message.id)}
-                title="Branch from here"
-                dark
-              />
+              {onBranch && (
+                <ActionBtn
+                  icon={<GitBranch size="0.6875rem" />}
+                  onClick={() => onBranch(message.id)}
+                  title="Branch from here"
+                  dark
+                />
+              )}
               <ActionBtn
                 icon={<Trash2 size="0.6875rem" />}
                 onClick={() => onDelete?.(message.id)}
@@ -1611,11 +1617,13 @@ export const ChatMessage = memo(function ChatMessage({
             {thinking && !isUser && (
               <ActionBtn icon={<Brain size="0.625rem" />} onClick={() => setShowThinking(true)} title="View thoughts" />
             )}
-            <ActionBtn
-              icon={<GitBranch size="0.625rem" />}
-              onClick={() => onBranch?.(message.id)}
-              title="Branch from here"
-            />
+            {onBranch && (
+              <ActionBtn
+                icon={<GitBranch size="0.625rem" />}
+                onClick={() => onBranch(message.id)}
+                title="Branch from here"
+              />
+            )}
             <ActionBtn
               icon={<Trash2 size="0.625rem" />}
               onClick={() => onDelete?.(message.id)}

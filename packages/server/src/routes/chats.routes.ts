@@ -1016,6 +1016,13 @@ export async function chatsRoutes(app: FastifyInstance) {
     const sourceChat = await storage.getById(req.params.id);
     if (!sourceChat) return reply.status(404).send({ error: "Chat not found" });
 
+    const sourceMeta =
+      typeof sourceChat.metadata === "string" ? JSON.parse(sourceChat.metadata) : (sourceChat.metadata ?? {});
+    const isSceneChat = sourceMeta.sceneStatus === "active" || !!sourceMeta.sceneOriginChatId;
+    if (isSceneChat) {
+      return reply.status(400).send({ error: "Scene chats cannot be branched" });
+    }
+
     const { upToMessageId } = (req.body ?? {}) as { upToMessageId?: string };
 
     // Ensure the source chat belongs to a group so branches are linked
@@ -1047,10 +1054,8 @@ export async function chatsRoutes(app: FastifyInstance) {
 
     // Copy metadata (preset, lorebooks, agents, persona settings, etc.) from source chat
     if (sourceChat.metadata) {
-      const srcMeta =
-        typeof sourceChat.metadata === "string" ? JSON.parse(sourceChat.metadata) : (sourceChat.metadata ?? {});
       // Preserve all settings but clear transient state like summaries
-      const { summary, daySummaries, weekSummaries, ...settingsToKeep } = srcMeta;
+      const { summary, daySummaries, weekSummaries, ...settingsToKeep } = sourceMeta;
       await storage.updateMetadata(newChat.id, settingsToKeep);
     }
 

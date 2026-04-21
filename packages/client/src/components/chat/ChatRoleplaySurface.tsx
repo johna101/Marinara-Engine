@@ -593,7 +593,7 @@ type RoleplaySurfaceProps = {
   onSetActiveSwipe: (messageId: string, index: number) => void;
   onToggleConversationStart: (messageId: string, current: boolean) => void;
   onPeekPrompt: () => void;
-  onBranch: (messageId: string) => void;
+  onBranch?: (messageId: string) => void;
   onToggleSelectMessage: (toggle: MessageSelectionToggle) => void;
   onSummaryContextSizeChange: (size: number) => void;
   onRerunTrackers: () => void;
@@ -719,6 +719,10 @@ export function ChatRoleplaySurface({
   isGrouped,
 }: RoleplaySurfaceProps) {
   const linkedChatName = chat?.connectedChatId ? allChats?.find((c) => c.id === chat.connectedChatId)?.name : undefined;
+  const sidebarOpen = useUIStore((s) => s.sidebarOpen);
+  const rightPanelOpen = useUIStore((s) => s.rightPanelOpen);
+  const hideEchoChamberOnMobile =
+    sidebarOpen || rightPanelOpen || settingsOpen || filesOpen || galleryOpen || wizardOpen;
 
   return (
     <div data-component="ChatArea.Roleplay" className="flex flex-1 overflow-hidden">
@@ -1085,7 +1089,7 @@ export function ChatRoleplaySurface({
 
         {/* Always mount so stagger timer runs even when panel is hidden */}
         <Suspense fallback={null}>
-          <EchoChamberPanel />
+          <EchoChamberPanel hiddenOnMobile={hideEchoChamberOnMobile} />
         </Suspense>
       </div>
 

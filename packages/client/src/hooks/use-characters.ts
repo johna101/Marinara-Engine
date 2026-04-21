@@ -90,6 +90,13 @@ export interface SpriteInfo {
   url: string;
 }
 
+export interface SpriteCapabilities {
+  imageProcessingAvailable: boolean;
+  spriteGenerationAvailable: boolean;
+  backgroundRemovalAvailable: boolean;
+  reason: string | null;
+}
+
 export interface CharacterGalleryImage {
   id: string;
   characterId: string;
@@ -105,7 +112,16 @@ export interface CharacterGalleryImage {
 
 export const spriteKeys = {
   list: (characterId: string) => ["sprites", characterId] as const,
+  capabilities: () => ["sprites", "capabilities"] as const,
 };
+
+export function useSpriteCapabilities() {
+  return useQuery({
+    queryKey: spriteKeys.capabilities(),
+    queryFn: () => api.get<SpriteCapabilities>("/sprites/capabilities"),
+    staleTime: 5 * 60_000,
+  });
+}
 
 export function useCharacterSprites(characterId: string | null) {
   return useQuery({

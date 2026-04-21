@@ -20,6 +20,7 @@ import { useUIStore } from "../stores/ui.store";
 import { chatKeys } from "./use-chats";
 import { characterKeys } from "./use-characters";
 import { playNotificationPing } from "../lib/notification-sound";
+import { stripGmTagsKeepReadables } from "../lib/game-tag-parser";
 import type { Chat, GameMap, Message } from "@marinara-engine/shared";
 
 function sortMessagesByCreatedAt(messages: Message[]): Message[] {
@@ -1250,9 +1251,7 @@ export function useGenerate() {
         // Auto-translate newly generated assistant messages if enabled
         if (receivedContent) {
           try {
-            const chatData = qc.getQueryData<{ metadata?: string | Record<string, unknown> }>(
-              chatKeys.detail(params.chatId),
-            );
+            const chatData = qc.getQueryData<Chat>(chatKeys.detail(params.chatId));
             const meta =
               chatData?.metadata != null
                 ? typeof chatData.metadata === "string"
@@ -1262,11 +1261,13 @@ export function useGenerate() {
             if (meta.autoTranslate) {
               const store = useTranslationStore.getState();
               for (const [id, msg] of persistedMessages) {
-                if (msg.role === "assistant" && msg.content && !store.translations[id]) {
+                const textToTranslate =
+                  chatData?.mode === "game" ? stripGmTagsKeepReadables(msg.content ?? "").trim() : (msg.content ?? "");
+                if (msg.role === "assistant" && textToTranslate && !store.translations[id]) {
                   store.setTranslating(id, true);
                   api
                     .post<{ translatedText: string }>("/translate", {
-                      text: msg.content,
+                      text: textToTranslate,
                       provider: store.config.provider,
                       targetLanguage: store.config.targetLanguage,
                       connectionId: store.config.connectionId,
@@ -1321,7 +1322,7 @@ export function useGenerate() {
   );
 
   const retryAgents = useCallback(
-    async (chatId: string, agentTypes: string[]) => {
+    async (chatId: string, agentTypes: string[], options?: { lorebookKeeperBackfill?: boolean }) => {
       const isActiveChat = () => useChatStore.getState().activeChatId === chatId;
       const abortController = new AbortController();
       useChatStore.getState().setAbortController(chatId, abortController);
@@ -1334,7 +1335,12 @@ export function useGenerate() {
         let hasError = false;
         for await (const event of api.streamEvents(
           "/generate/retry-agents",
-          { chatId, agentTypes, streaming: useUIStore.getState().enableStreaming },
+          {
+            chatId,
+            agentTypes,
+            streaming: useUIStore.getState().enableStreaming,
+            lorebookKeeperBackfill: options?.lorebookKeeperBackfill === true,
+          },
           abortController.signal,
         )) {
           switch (event.type) {
@@ -1502,7 +1508,11 @@ export function useGenerate() {
             }
           }
         }
-        if (!hasError) toast.success("Agent retry completed");
+        if (!hasError) {
+          toast.success(
+            options?.lorebookKeeperBackfill ? "Lorebook Keeper backfill completed" : "Agent retry completed",
+          );
+        }
       } catch (error) {
         if (error instanceof DOMException && error.name === "AbortError") return;
         const msg =

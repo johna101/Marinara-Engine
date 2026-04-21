@@ -15,10 +15,10 @@ import {
 
 /**
  * Models that ONLY support the Responses API (`/responses`) and not Chat Completions.
- * GPT-5.4 base uses Chat Completions; Pro and Codex variants use Responses.
+ * All GPT-5.4 variants (base, pro, mini, dated snapshots) and Codex models use Responses.
  * Matching is case-insensitive.
  */
-const RESPONSES_ONLY_PREFIXES = ["gpt-5.4-pro", "gpt-5.4-mini", "codex-"];
+const RESPONSES_ONLY_PREFIXES = ["gpt-5.4", "codex-"];
 const RESPONSES_ONLY_SUFFIXES = ["-codex", "-codex-max", "-codex-mini"];
 
 type ChatCompletionsUsagePayload = {
@@ -119,6 +119,15 @@ export class OpenAIProvider extends BaseLLMProvider {
     // Claude Opus 4.7+: all sampling params forbidden (covers reverse proxies)
     if (/claude-opus-4-(?:[7-9]|\d{2,})/.test(m)) return true;
     return false;
+  }
+
+  /** GLM variants use a boolean thinking toggle instead of effort-based reasoning config. */
+  private isGLMModel(model: string): boolean {
+    return model.toLowerCase().includes("glm");
+  }
+
+  private hasActiveReasoningEffort(reasoningEffort?: string | null): boolean {
+    return !!reasoningEffort && reasoningEffort !== "none";
   }
 
   /** Check if a model requires the Responses API instead of Chat Completions */
@@ -251,18 +260,12 @@ export class OpenAIProvider extends BaseLLMProvider {
       if (options.presencePenalty) body.presence_penalty = options.presencePenalty;
     }
 
-    // GLM models (GLM-4.7, GLM-5, etc.) use a `thinking` toggle instead of reasoning_effort
-    const modelLower = options.model.toLowerCase();
-    if (modelLower.startsWith("glm-")) {
-      body.thinking = { type: options.reasoningEffort ? "enabled" : "disabled" };
+    // GLM models use a boolean `enable_thinking` toggle instead of effort-based reasoning config.
+    if (this.isGLMModel(options.model)) {
+      body.enable_thinking = this.hasActiveReasoningEffort(options.reasoningEffort);
     } else if (options.reasoningEffort) {
       // Send reasoning_effort if set (outside reasoning check so custom/OAI-compatible providers also get it)
       body.reasoning_effort = options.reasoningEffort;
-    }
-
-    // GPT-5+ text verbosity control (Chat Completions path)
-    if (options.verbosity && options.model.toLowerCase().startsWith("gpt-5")) {
-      body.text = { verbosity: options.verbosity };
     }
 
     // OpenRouter provider routing preference
@@ -435,14 +438,12 @@ export class OpenAIProvider extends BaseLLMProvider {
       if (options.presencePenalty) body.presence_penalty = options.presencePenalty;
     }
 
-    // Send reasoning_effort if set (outside reasoning check so custom/OAI-compatible providers also get it)
-    if (options.reasoningEffort) {
+    // GLM models use a boolean `enable_thinking` toggle instead of effort-based reasoning config.
+    if (this.isGLMModel(options.model)) {
+      body.enable_thinking = this.hasActiveReasoningEffort(options.reasoningEffort);
+    } else if (options.reasoningEffort) {
+      // Send reasoning_effort if set (outside reasoning check so custom/OAI-compatible providers also get it)
       body.reasoning_effort = options.reasoningEffort;
-    }
-
-    // GPT-5+ text verbosity control (Chat Completions path)
-    if (options.verbosity && options.model.toLowerCase().startsWith("gpt-5")) {
-      body.text = { verbosity: options.verbosity };
     }
 
     // OpenRouter provider routing preference
@@ -791,11 +792,15 @@ export class OpenAIProvider extends BaseLLMProvider {
       if (options.presencePenalty) body.presence_penalty = options.presencePenalty;
     }
 
-    // Build the reasoning config: effort + opt-in to reasoning summaries
-    const reasoning: Record<string, unknown> = {};
-    if (options.reasoningEffort) reasoning.effort = options.reasoningEffort;
-    if (options.enableThinking) reasoning.summary = "auto";
-    if (Object.keys(reasoning).length > 0) body.reasoning = reasoning;
+    if (this.isGLMModel(options.model)) {
+      body.enable_thinking = this.hasActiveReasoningEffort(options.reasoningEffort);
+    } else {
+      // Build the reasoning config: effort + opt-in to reasoning summaries
+      const reasoning: Record<string, unknown> = {};
+      if (options.reasoningEffort) reasoning.effort = options.reasoningEffort;
+      if (options.enableThinking) reasoning.summary = "auto";
+      if (Object.keys(reasoning).length > 0) body.reasoning = reasoning;
+    }
 
     // GPT-5+ text verbosity control
     if (options.verbosity && options.model.toLowerCase().startsWith("gpt-5")) {

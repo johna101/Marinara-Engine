@@ -27,6 +27,7 @@ import {
   FlipHorizontal2,
 } from "lucide-react";
 import { cn } from "../../lib/utils";
+import { Modal } from "../ui/Modal";
 import { useUIStore } from "../../stores/ui.store";
 import { useChatStore } from "../../stores/chat.store";
 import { useGameStateStore } from "../../stores/game-state.store";
@@ -439,36 +440,16 @@ function WorldInfoButton({ chatId }: { chatId: string | null }) {
 
 function AuthorNotesButton({ chatId, chatMeta }: { chatId: string | null; chatMeta: Record<string, any> }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
   const compact = useUIStore((s) => s.centerCompact);
-
-  useEffect(() => {
-    if (!open || isMobile) return;
-    const handle = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", handle);
-    return () => document.removeEventListener("mousedown", handle);
-  }, [open, isMobile]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", handler);
-    return () => document.removeEventListener("keydown", handler);
-  }, [open]);
 
   if (!chatId) return null;
 
   const hasNotes = !!String(chatMeta.authorNotes ?? "").trim();
 
   return (
-    <div className="relative" ref={ref} onClick={(e) => e.stopPropagation()}>
+    <>
       <button
-        onClick={() => setOpen(!open)}
+        onClick={() => setOpen(true)}
         className={cn(
           "flex items-center justify-center rounded-full border backdrop-blur-md transition-all",
           compact ? "p-1" : "p-1.5",
@@ -482,58 +463,19 @@ function AuthorNotesButton({ chatId, chatMeta }: { chatId: string | null; chatMe
       >
         <PenLine size="0.875rem" />
       </button>
-      {open &&
-        (isMobile ? (
-          createPortal(
-            <div
-              className="fixed inset-0 z-[9999] flex items-center justify-center p-4 max-md:pt-[max(1rem,env(safe-area-inset-top))]"
-              onMouseDown={(e) => e.stopPropagation()}
-              onTouchStart={(e) => e.stopPropagation()}
-            >
-              <div className="absolute inset-0 bg-black/30" onClick={() => setOpen(false)} />
-              <div
-                className="relative max-h-[calc(100dvh-4rem)] w-full max-w-sm overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-2xl shadow-black/40 animate-message-in"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <Suspense
-                  fallback={
-                    <div className="flex items-center gap-2 py-4 text-xs text-[var(--muted-foreground)]">
-                      <Loader2 size="0.75rem" className="animate-spin" />
-                      Loading author's notes...
-                    </div>
-                  }
-                >
-                  <AuthorNotesPanel
-                    chatId={chatId}
-                    chatMeta={chatMeta}
-                    isMobile={isMobile}
-                    onClose={() => setOpen(false)}
-                  />
-                </Suspense>
-              </div>
-            </div>,
-            document.body,
-          )
-        ) : (
-          <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-xl border border-[var(--border)] bg-[var(--card)] p-3 shadow-2xl shadow-black/40 animate-message-in">
-            <Suspense
-              fallback={
-                <div className="flex items-center gap-2 py-4 text-xs text-[var(--muted-foreground)]">
-                  <Loader2 size="0.75rem" className="animate-spin" />
-                  Loading author's notes...
-                </div>
-              }
-            >
-              <AuthorNotesPanel
-                chatId={chatId}
-                chatMeta={chatMeta}
-                isMobile={isMobile}
-                onClose={() => setOpen(false)}
-              />
-            </Suspense>
-          </div>
-        ))}
-    </div>
+      <Modal open={open} onClose={() => setOpen(false)} title="Author's Notes">
+        <Suspense
+          fallback={
+            <div className="flex items-center gap-2 py-4 text-xs text-[var(--muted-foreground)]">
+              <Loader2 size="0.75rem" className="animate-spin" />
+              Loading author's notes...
+            </div>
+          }
+        >
+          <AuthorNotesPanel chatId={chatId} chatMeta={chatMeta} onClose={() => setOpen(false)} />
+        </Suspense>
+      </Modal>
+    </>
   );
 }
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Globe, Loader2, X } from "lucide-react";
+import { Globe, Loader2, PenLine, X } from "lucide-react";
 import { useUpdateChatMetadata } from "../../hooks/use-chats";
 import { useActiveLorebookEntries } from "../../hooks/use-lorebooks";
 
@@ -206,5 +206,72 @@ export function AuthorNotesPanel({
         </button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Read-only preview of the current Author's Notes, rendered as a transient
+ * popover. This is the view half of the peek/edit split: a popover that shows
+ * what's set without opening a full dialog. Clicking "Edit" hands off to
+ * AuthorNotesPanel in a Modal for committed editing.
+ *
+ * Because this component performs no mutations, the outside-click/Escape
+ * dismissal that loses state in an editor is harmless here.
+ */
+export function AuthorNotesPeek({
+  chatMeta,
+  isMobile,
+  onEdit,
+  onClose,
+}: {
+  chatMeta: Record<string, any>;
+  isMobile: boolean;
+  onEdit: () => void;
+  onClose: () => void;
+}) {
+  const notes = String(chatMeta.authorNotes ?? "").trim();
+  const depth = (chatMeta.authorNotesDepth as number) ?? 4;
+
+  return (
+    <>
+      <h3 className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-[var(--foreground)]">
+        <PenLine size="0.75rem" />
+        Author's Notes
+        {isMobile && (
+          <button
+            onClick={onClose}
+            className="ml-auto rounded-md p-1 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+          >
+            <X size="0.75rem" />
+          </button>
+        )}
+      </h3>
+      {notes ? (
+        <>
+          <div className="mb-2 max-h-64 overflow-y-auto whitespace-pre-wrap rounded-lg bg-[var(--secondary)] px-2.5 py-2 text-xs leading-relaxed text-[var(--foreground)]/90">
+            {notes}
+          </div>
+          <p className="mb-2 text-[0.625rem] text-[var(--muted-foreground)]">
+            Injected at depth {depth} every generation.
+          </p>
+        </>
+      ) : (
+        <p className="mb-2 rounded-lg bg-[var(--secondary)]/50 py-4 text-center text-xs italic text-[var(--muted-foreground)]">
+          No Author's Notes yet.
+        </p>
+      )}
+      {/* Footer: small muted Edit button. Mode transition, not a primary
+          action — matches the Summary peek's Edit for consistent design
+          language across peek popovers. */}
+      <div className="flex justify-end border-t border-[var(--border)]/40 pt-2">
+        <button
+          onClick={onEdit}
+          className="flex items-center gap-1 rounded-md px-2.5 py-1 text-[0.625rem] font-medium text-[var(--muted-foreground)] transition-colors hover:bg-[var(--accent)] hover:text-[var(--foreground)]"
+        >
+          <PenLine size="0.625rem" />
+          Edit
+        </button>
+      </div>
+    </>
   );
 }

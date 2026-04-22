@@ -52,6 +52,23 @@ export class GoogleProvider extends BaseLLMProvider {
           includeThoughts: true,
         };
       }
+    } else if (supportsThinking) {
+      // Caller did NOT request thinking, but the model supports it. Gemini's
+      // default for thinking-capable models is to think aggressively, which
+      // SILENTLY CONSUMES THE maxOutputTokens BUDGET. A caller asking for
+      // 1024 tokens of output would see ~980 tokens spent on thinking and
+      // ~40 tokens of actual response, then truncation with MAX_TOKENS.
+      //
+      // Explicitly disable thinking so requested maxTokens means OUTPUT
+      // tokens, matching the contract of every other provider. Gemini 2.5
+      // accepts thinkingBudget: 0 to disable. Gemini 3.x doesn't allow
+      // fully disabling, so use thinkingLevel: "low" — the smallest
+      // reservation — to leave room for output.
+      if (isGemini3) {
+        thinkingConfig = { thinkingLevel: "low" };
+      } else {
+        thinkingConfig = { thinkingBudget: 0 };
+      }
     }
 
     // Ensure the base URL includes the /v1beta path segment required by the Gemini API.
@@ -59,10 +76,16 @@ export class GoogleProvider extends BaseLLMProvider {
     let base = this.baseUrl.replace(/\/+$/, "");
     if (!/\/v\d/.test(base)) base += "/v1beta";
 
-    // When thinking is enabled, force non-streaming (generateContent) because
-    // proxies like linkapi.ai strip thought parts from SSE streams but return
-    // them in non-streaming responses. Text is still yielded so SSE works.
-    const useStreaming = options.stream && !thinkingConfig;
+    // When thinking is ACTIVE (caller asked for it), force non-streaming
+    // (generateContent) because proxies like linkapi.ai strip thought parts
+    // from SSE streams but return them in non-streaming responses. Text is
+    // still yielded so SSE works.
+    //
+    // When thinkingConfig is present only to EXPLICITLY DISABLE thinking
+    // (no `includeThoughts` flag — see the else-if branch above), there are
+    // no thoughts to preserve, so streaming is fine.
+    const isThinkingActive = !!thinkingConfig?.includeThoughts;
+    const useStreaming = options.stream && !isThinkingActive;
     const endpoint = useStreaming ? "streamGenerateContent" : "generateContent";
     const url = `${base}/models/${model}:${endpoint}${useStreaming ? "?alt=sse" : ""}`;
 

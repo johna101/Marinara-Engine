@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Globe, Loader2, PenLine, X } from "lucide-react";
 import { useUpdateChatMetadata } from "../../hooks/use-chats";
 import { useActiveLorebookEntries } from "../../hooks/use-lorebooks";
@@ -100,19 +100,70 @@ export function AuthorNotesPanel({
   isMobile: boolean;
   onClose: () => void;
 }) {
-  const [notes, setNotes] = useState((chatMeta.authorNotes as string) ?? "");
-  const [depthStr, setDepthStr] = useState(String((chatMeta.authorNotesDepth as number) ?? 4));
+  const propsNotes = (chatMeta.authorNotes as string) ?? "";
+  const propsDepth = (chatMeta.authorNotesDepth as number) ?? 4;
+
+  const [notes, setNotes] = useState(propsNotes);
+  const [depthStr, setDepthStr] = useState(String(propsDepth));
   const updateMeta = useUpdateChatMetadata();
 
+  // Tracks the last values we persisted (or received from the server). Used to
+  // distinguish external prop changes from our own just-saved writes echoing
+  // back through React Query invalidation — so in-flight typing isn't clobbered.
+  const lastSavedRef = useRef({ notes: propsNotes, depth: propsDepth });
+
+  // Keep the mutate function and live values addressable from the unmount
+  // cleanup without forcing the effects below to re-run on every render.
+  const mutateRef = useRef(updateMeta.mutate);
   useEffect(() => {
-    setNotes((chatMeta.authorNotes as string) ?? "");
-    setDepthStr(String((chatMeta.authorNotesDepth as number) ?? 4));
-  }, [chatMeta.authorNotes, chatMeta.authorNotesDepth]);
+    mutateRef.current = updateMeta.mutate;
+  });
 
   const depth = parseInt(depthStr, 10) || 0;
-  const handleSave = () => {
-    updateMeta.mutate({ id: chatId, authorNotes: notes, authorNotesDepth: depth });
-  };
+
+  const liveValuesRef = useRef({ notes, depth });
+  useEffect(() => {
+    liveValuesRef.current = { notes, depth };
+  }, [notes, depth]);
+
+  // Sync from props only when the incoming value genuinely differs from what we
+  // last persisted. Prevents a round-tripped save from overwriting typing that
+  // happened after the mutation was fired.
+  useEffect(() => {
+    if (propsNotes !== lastSavedRef.current.notes) {
+      setNotes(propsNotes);
+      lastSavedRef.current.notes = propsNotes;
+    }
+    if (propsDepth !== lastSavedRef.current.depth) {
+      setDepthStr(String(propsDepth));
+      lastSavedRef.current.depth = propsDepth;
+    }
+  }, [propsNotes, propsDepth]);
+
+  // Debounced autosave. Replaces the old onBlur-only save path, which lost
+  // edits when the popover's outside-click handler (mousedown) unmounted the
+  // textarea before its native blur event could fire.
+  useEffect(() => {
+    if (notes === lastSavedRef.current.notes && depth === lastSavedRef.current.depth) return;
+    const t = setTimeout(() => {
+      lastSavedRef.current = { notes, depth };
+      mutateRef.current({ id: chatId, authorNotes: notes, authorNotesDepth: depth });
+    }, 300);
+    return () => clearTimeout(t);
+  }, [notes, depth, chatId]);
+
+  // Safety net: if the panel unmounts during the debounce window (the common
+  // case — user types then clicks outside), flush any pending edit synchronously
+  // so the mutation fires before React tears the component down.
+  useEffect(() => {
+    return () => {
+      const { notes: n, depth: d } = liveValuesRef.current;
+      if (n !== lastSavedRef.current.notes || d !== lastSavedRef.current.depth) {
+        lastSavedRef.current = { notes: n, depth: d };
+        mutateRef.current({ id: chatId, authorNotes: n, authorNotesDepth: d });
+      }
+    };
+  }, [chatId]);
 
   return (
     <>
@@ -134,7 +185,6 @@ export function AuthorNotesPanel({
       <textarea
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        onBlur={handleSave}
         placeholder="e.g. Keep the tone dark and suspenseful. The villain is secretly an ally."
         className="w-full resize-none rounded-lg border border-[var(--border)] bg-[var(--secondary)] px-2.5 py-2 text-xs text-[var(--foreground)] outline-none transition-colors placeholder:text-[var(--muted-foreground)] focus:ring-2 focus:ring-[var(--ring)]"
         rows={4}
@@ -149,7 +199,6 @@ export function AuthorNotesPanel({
           onBlur={() => {
             const nextDepth = Math.max(0, parseInt(depthStr, 10) || 0);
             setDepthStr(String(nextDepth));
-            updateMeta.mutate({ id: chatId, authorNotes: notes, authorNotesDepth: nextDepth });
           }}
           className="w-14 rounded-md border border-[var(--border)] bg-[var(--secondary)] px-2 py-0.5 text-center text-[0.625rem] text-[var(--foreground)] outline-none transition-colors [appearance:textfield] focus:ring-2 focus:ring-[var(--ring)] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
         />
